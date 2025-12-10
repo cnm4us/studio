@@ -1,0 +1,105 @@
+# Handoff 02 — Spaces & Minimal Auth Skeleton
+
+## 3.1 Thread Summary
+- Purpose: Implement Implementation Plan 02 for minimal auth and user-scoped Spaces in the Studio app.
+- Context: Inherits from `agents/handoff/handoff_01.md`, which bootstrapped the Studio repo, DB, and nginx/SSL, and left `/api/spaces` as a placeholder with no `users` or `spaces` tables.
+- Scope: Focus on DB schema for `users` and `spaces`, backend auth primitives and routes, Spaces API, and basic frontend wiring as described in `agents/implementation/plan_02.md`.
+
+## 3.2 Implementation Notes
+- DB schema:
+  - Extended `db/migrations.sql` with `users` and `spaces` tables to support minimal auth and user-owned spaces.
+  - `users`: `id` (INT UNSIGNED PK, auto-increment), `email` (unique), `password_hash`, `created_at`, `updated_at`.
+  - `spaces`: `id` (INT UNSIGNED PK, auto-increment), `user_id` (FK → `users.id` with CASCADE on delete/update), `name`, optional `description`, `created_at`, and a unique `(user_id, name)` constraint.
+- Migrations:
+  - Applied `db/migrations.sql` to the `studio` MySQL database via CLI (idempotent re-run is safe due to `CREATE TABLE IF NOT EXISTS`).
+  - Verified with `SHOW TABLES;` and `DESCRIBE users; DESCRIBE spaces;` that the new tables exist with the expected columns and types.
+  - Performed a transactional smoke test: inserted a temporary `users` row and related `spaces` row, selected them via a join, then rolled back the transaction to avoid leaving test data.
+  - Confirmed `schema_version` table remains present and currently has 0 rows (`SELECT COUNT(*) FROM schema_version;`).
+- Auth env & helpers:
+  - Added `JWT_SECRET` placeholder to `.env.example` for token signing configuration.
+  - Updated `server/package.json` to include `bcryptjs` and `jsonwebtoken` (plus type definitions) and added an `auth:test` script.
+  - Implemented `server/src/auth_service.ts` with password hashing/verification, basic `users` table access helpers, and JWT-based `generateAuthToken` / `verifyAuthToken` using `JWT_SECRET` (with a dev fallback and console warning).
+  - Added `server/src/dev_auth_test.ts` and ran `npm run auth:test` to verify password hashing and token encode/decode behavior end-to-end.
+- Auth routes:
+  - Implemented `server/src/auth_routes.ts` with `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, and `/api/auth/me`, using `auth_service` and HTTP-only `auth_token` cookie (SameSite=Lax, Secure).
+  - Wired the router into `server/src/index.ts` via `app.use('/api/auth', authRouter);` and added `cookie-parser` middleware for cookie access.
+  - Verified via curl (direct to `127.0.0.1:6000` and via `https://studio.bawebtech.com` behind nginx) that:
+    - `register` with a new email sets an `auth_token` cookie and returns 201.
+    - `login` with valid credentials sets/refreshes the cookie and returns 200.
+    - `me` returns 200 with the user when the cookie is present, 401 otherwise.
+    - `logout` clears the cookie and subsequent `me` calls return 401.
+- Spaces routes:
+  - Implemented `server/src/spaces_routes.ts` with an authenticated router (`attachUserFromToken` + `requireAuth`) mounted at `/api/spaces`.
+  - `GET /api/spaces`: returns `{ spaces: [...] }` for the authenticated user, selecting from the `spaces` table by `user_id` and ordering by `created_at DESC`.
+  - `POST /api/spaces`: validates `name`, inserts a new row for the current user, handles duplicate `(user_id, name)` via a `SPACE_NAME_TAKEN` error, and returns the created space with 201.
+  - Wired the router into `server/src/index.ts` via `app.use('/api/spaces', spacesRouter);` (replacing the previous placeholder handler) and confirmed the server builds successfully.
+- Projects routes (Plan 03):
+  - Extended `db/migrations.sql` with a `projects` table: `id` (INT UNSIGNED PK, auto-increment), `space_id` (FK → `spaces.id` with CASCADE on delete/update), `name`, optional `description`, `created_at`, and a unique `(space_id, name)` constraint.
+  - Implemented `server/src/projects_routes.ts` as an authenticated router mounted at `/api/spaces/:spaceId/projects`, with:
+    - `GET /api/spaces/:spaceId/projects`: lists projects for the given Space (owned by the current user), ordered by `created_at DESC`.
+    - `POST /api/spaces/:spaceId/projects`: validates `name`, inserts a new row for the Space, handles duplicate `(space_id, name)` via `PROJECT_NAME_TAKEN`, and returns the created project with 201.
+  - Wired the router into `server/src/index.ts` via `app.use('/api/spaces/:spaceId/projects', projectsRouter);` and verified via curl that unauthenticated requests return `401`, non-owned spaces return `404`, and owned spaces support list/create as expected.
+- Definitions & lineage (Plan 04 – step 1):
+  - Extended `db/migrations.sql` with a `definitions` table: `id` (INT UNSIGNED PK), `type` (`'character' | 'scene'`), `scope` (`'space' | 'project'`), `space_id`, `project_id`, `root_id`, `parent_id`, `name`, `description`, `state` (`'draft' | 'canonical' | 'deprecated' | 'archived'`), `metadata` (JSON), and timestamps, plus FKs to `spaces`, `projects`, and self-referential `root_id`/`parent_id`.
+  - Verified via transactional inserts that Space-scoped character definitions can be created, updated to set `root_id = id`, and queried successfully, then rolled back to avoid leaving test data.
+- Definitions & lineage (Plan 04 – steps 2–4):
+  - Implemented `server/src/definitions_service.ts` with helpers to list Space-scoped definitions (`listSpaceDefinitions`) and create a Space-level definition (`createSpaceDefinition`) with `scope='space'`, `state='draft'`, and `root_id` set to `id` on first creation.
+  - Added `server/src/space_definitions_routes.ts` mounted under `/api/spaces/:spaceId` with authenticated routes:
+    - `GET /api/spaces/:spaceId/characters` / `scenes` to list Space-level character/scene definitions.
+    - `POST /api/spaces/:spaceId/characters` / `scenes` to create new Space-level definitions with `{ name, description? }`, including space-ownership checks and standard auth behavior.
+  - Implemented `cloneDefinitionToProject` in `definitions_service` and `server/src/project_import_routes.ts` mounted at `/api/projects/:projectId/import` to clone Space-level definitions into a Project:
+    - Ensures the project belongs to a Space owned by the current user.
+    - Accepts `{ characters: number[], scenes: number[] }` and creates project-scoped definitions with `scope='project'`, `project_id`, `root_id` (from Space definition), and `parent_id` (Space definition `id`).
+  - Verified via curl that definitions can be created/listed at the Space level and imported into a Project; import responses include the new project-level definitions with correct lineage fields.
+- Tasks & rendered assets (Plan 05):
+  - DB schema:
+    - Extended `db/migrations.sql` with `tasks` and `rendered_assets` tables:
+      - `tasks`: `id`, `project_id` (FK → `projects.id`), `name`, `description`, `prompt`, `status` (`pending`, `running`, `completed`, `failed`), `created_at`, `updated_at`, with an index on `(project_id, status)`.
+      - `rendered_assets`: `id`, `project_id` (FK → `projects.id`), `task_id` (FK → `tasks.id`), `type` (e.g. `'image'`), `file_key`, `file_url`, `metadata` (JSON), `state` (`draft`, `approved`, `archived`), `created_at`, and indexes on `project_id` and `task_id`.
+    - Verified via transactional inserts that tasks and rendered_assets rows can be created and joined, then rolled back to avoid leaving test data.
+  - Backend services and routes:
+    - Added `server/src/tasks_service.ts` with helpers to create Tasks, update Task status, list project Tasks, and create/list RenderedAssets.
+    - Added `server/src/s3_client.ts` that:
+      - Uses `AWS_REGION`/`AWS_DEFAULT_REGION` and `AWS_S3_BUCKET`/`ARGUS_S3_BUCKET` for configuration.
+      - Uploads images via `PutObject` and returns `{ key, url }`, using `CF_DOMAIN` for CloudFront URLs when set, or falling back to the S3 URL.
+    - Added `server/src/gemini_client.ts` that:
+      - Uses `GOOGLE_API_KEY` or `GEMINI_API_KEY` and `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image-preview`).
+      - Exposes `renderImageWithGemini(prompt)` which returns `{ mimeType, data: Buffer }` from the first inline image part.
+    - Added `server/src/tasks_routes.ts`, mounted in `server/src/index.ts` as:
+      - `app.use('/api/projects/:projectId', projectTasksRouter);`
+      - `app.use('/api/tasks/:taskId', taskRenderRouter);`
+    - `projectTasksRouter` (authenticated and ownership-checked):
+      - `POST /api/projects/:projectId/tasks` → creates a Task with optional description/prompt and `status='pending'`.
+      - `GET /api/projects/:projectId/tasks` → lists Tasks for the Project ordered by `created_at DESC`.
+      - `GET /api/projects/:projectId/rendered-assets` → lists RenderedAssets for the Project ordered by `created_at DESC`.
+    - `taskRenderRouter`:
+      - `POST /api/tasks/:taskId/render` → validates Task ownership, sets status to `running`, calls Gemini, uploads the image to S3 under `projects/<project_id>/tasks/<task_id>/<timestamp>.<ext>`, creates a RenderedAsset, marks the Task `completed`, and returns `{ task, renderedAssets: [asset] }`. On failure it marks the Task `failed` and returns an error (`GEMINI_NOT_CONFIGURED`, `GEMINI_NO_IMAGE_RETURNED`, `S3_NOT_CONFIGURED`, or `TASK_RENDER_FAILED`).
+  - Frontend wiring (Tasks & renders UI):
+    - Extended `client/src/App.tsx` when a Project is selected to show a “Tasks & renders for selected project” panel:
+      - Form to create a Task (`name` required, optional `prompt` and `description`) wired to `POST /api/projects/:projectId/tasks`.
+      - Task list for the selected Project using `GET /api/projects/:projectId/tasks`, showing name, status, and description.
+      - “Render” button per Task that calls `POST /api/tasks/:taskId/render`, with simple loading/error states and status updates.
+    - Added a “Rendered assets” gallery under the Task list:
+      - Uses `GET /api/projects/:projectId/rendered-assets` to fetch assets.
+      - Displays image thumbnails via `file_url` for `type === 'image'` (linking out to the CloudFront/S3 URL) and shows asset state.
+    - The existing Spaces/Projects/Definitions UX remains intact; Tasks/Renders are additive for the selected Project.
+  - Environment and infrastructure:
+    - `CF_DOMAIN=studio-media.bawebtech.com` is set in `.env`, pointing to a CloudFront distribution configured to front the private `bacs-studio` S3 bucket.
+    - IAM policies allow `s3:PutObject`, `s3:GetObject`, and `s3:ListBucket` for `bacs-studio`, and the bucket policy allows CloudFront access via the distribution ARN.
+
+- Frontend wiring:
+  - Replaced the placeholder `client/src/App.tsx` with a minimal auth + spaces UI:
+    - Calls `/api/auth/me` on load to detect an existing session.
+    - Provides login/register toggles and forms wired to `/api/auth/login` and `/api/auth/register`, with basic error messaging for common failure codes.
+    - Shows a Spaces dashboard when authenticated, backed by `/api/spaces` (list + create form), and a logout button wired to `/api/auth/logout`.
+  - Extended the UI to allow selecting a Space and, for the selected Space, listing and creating Projects backed by `/api/spaces/:spaceId/projects` (with basic loading/error states).
+  - Added a simple "Space assets" panel showing Space-level characters and scenes for the selected Space, with forms to add new assets.
+  - Added an "Import all characters & scenes into selected project" action that calls `POST /api/projects/:projectId/import`, leveraging the new Space definitions and import endpoint.
+  - Confirmed `client` builds successfully (`npm run build`) after the changes.
+
+## 3.3 Open Questions / Deferred Tasks
+- Plans 02, 03, and 04 are effectively complete. Further work should follow the broader roadmap (Styles, RenderedAssets, Tasks, richer import flows) in `agents/implementation/roadmap.md`.
+
+## 3.4 Suggestions for Next Threadself
+- Treat Plans 02–04 (auth + spaces, projects, and basic definitions/import) as done; verify README and env vars on any new environment before deploying.
+- For next implementation work, move toward styles and RenderedAssets (Phase 5) and begin wiring S3 + Gemini-backed rendering, building on the definitions and lineage model established here.

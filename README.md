@@ -2,7 +2,12 @@
 
 Studio is a new asset- and lineage-driven application for managing creative universes (Spaces), story-specific Projects, and their generated media. It is a clean reimplementation based on the architecture in `agents/architecture/`, separate from the existing Graphics app, but reusing its best patterns.
 
-This repo currently contains only the initial infrastructure scaffold: database, backend, frontend, and Nginx config. The core domain model (Spaces, Projects, Definitions, RenderedAssets) will be implemented in subsequent plans.
+The current implementation includes:
+
+- Database schema for `users` and `spaces`.
+- Minimal email/password authentication with HTTP-only cookies.
+- A user-scoped Spaces API and a simple React dashboard for login/register and basic space management.
+- Initial infrastructure scaffold: database, backend, frontend, and Nginx config. The core domain model (Projects, Definitions, RenderedAssets) will be implemented in subsequent plans.
 
 ## Prerequisites
 
@@ -23,6 +28,7 @@ At minimum, set:
 
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` for the `studio` database.
 - `PORT` for the backend server (default 6000).
+- `JWT_SECRET` for signing auth tokens (use a strong random value in production).
 
 ## Database
 
@@ -40,7 +46,15 @@ Apply migrations:
 sudo mysql -D studio -e "SOURCE /home/ubuntu/studio/db/migrations.sql; SHOW TABLES;"
 ```
 
-The initial migration creates a `schema_version` table. Future migrations will add tables for Spaces, Projects, Definitions, and RenderedAssets.
+The migrations currently create:
+
+- `schema_version` — basic schema tracking.
+- `users` — minimal auth users (email + password hash).
+- `spaces` — user-owned Spaces (name, optional description, timestamps).
+- `projects` — Projects belonging to a Space (name, optional description, timestamps).
+- `definitions` — shared definitions for characters/scenes in Space and Project scopes, with lineage fields (`root_id`, `parent_id`) and lifecycle `state`.
+- `tasks` — per-Project tasks with name, optional description/prompt, status, and timestamps.
+- `rendered_assets` — per-Project rendered outputs linked to tasks, with file key/URL, metadata, and state.
 
 ## Backend (server)
 
@@ -53,24 +67,79 @@ cd server
 npm install
 ```
 
-### Build
+### Type-check and build
 
 ```bash
+# Type-check only (no emit)
+npm run check
+
+# Build (type-check + emit dist/)
 npm run build
 ```
 
-### Run in development
+### Run in development (from TypeScript)
 
 ```bash
 npm run dev
 ```
 
-This starts the server (by default) on the port specified in `PORT` (6000 in the current `.env`).
+This runs `src/index.ts` through `tsx` on the port specified in `PORT` (6000 by default). Restart this command after editing backend TypeScript files.
 
-### Health checks
+### Run from build (production-style)
+
+```bash
+npm run start
+```
+
+This runs the compiled `dist/index.js` and is what you would place behind Nginx or a process manager in production.
+
+### Gemini, S3 and render pipeline
+
+The render pipeline uses:
+
+- Gemini image model via `@google/generative-ai`.
+- S3 for binary storage, fronted by CloudFront for public access.
+
+Environment variables:
+
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY` — API key for Gemini.
+- `GEMINI_IMAGE_MODEL` — image model name (defaults to `gemini-3-pro-image-preview`).
+- `AWS_REGION` or `AWS_DEFAULT_REGION` — AWS region for S3.
+- `AWS_S3_BUCKET` or `ARGUS_S3_BUCKET` — bucket name for storing media.
+- `CF_DOMAIN` — optional CloudFront domain (e.g., `studio-media.bawebtech.com`); when set, rendered asset URLs use this domain.
+
+Render flow (high level):
+
+1. A Task is created for a Project (`POST /api/projects/:projectId/tasks`) with a name and optional description/prompt.
+2. A render is triggered for that Task (`POST /api/tasks/:taskId/render`), which:
+   - Updates Task status to `running`.
+   - Calls Gemini with the prompt (request body, Task prompt, or a fallback).
+   - Uploads the returned image to S3 under a key like `projects/<projectId>/tasks/<taskId>/<timestamp>.<ext>`.
+   - Creates a RenderedAsset row with the S3 key and a public URL (CloudFront if `CF_DOMAIN` is set).
+   - Marks the Task as `completed` (or `failed` on error).
+3. RenderedAssets for a Project are listed via `GET /api/projects/:projectId/rendered-assets` and surfaced in the UI.
+
+### Health checks and APIs
 
 - `GET /health` → `{ "status": "ok" }`
 - `GET /health/db` → verifies DB connectivity via `SELECT 1` against the `studio` database.
+- `POST /api/auth/register` → register with `{ email, password }`, sets an HTTP-only `auth_token` cookie.
+- `POST /api/auth/login` → log in with `{ email, password }`, sets/refreshes `auth_token`.
+- `POST /api/auth/logout` → clears the auth cookie.
+- `GET /api/auth/me` → returns `{ user }` when authenticated, `401` otherwise.
+- `GET /api/spaces` → lists spaces for the authenticated user.
+- `POST /api/spaces` → creates a new space for the authenticated user.
+- `GET /api/spaces/:spaceId/projects` → lists projects for a given Space owned by the authenticated user.
+- `POST /api/spaces/:spaceId/projects` → creates a new project in the given Space.
+- `GET /api/spaces/:spaceId/characters` → lists Space-level character definitions for a Space owned by the user.
+- `POST /api/spaces/:spaceId/characters` → creates a new Space-level character definition.
+- `GET /api/spaces/:spaceId/scenes` → lists Space-level scene definitions.
+- `POST /api/spaces/:spaceId/scenes` → creates a new Space-level scene definition.
+- `POST /api/projects/:projectId/import` → imports Space-level characters/scenes into a Project as project-scoped definitions using lineage fields.
+- `POST /api/projects/:projectId/tasks` → creates a new Task for the given Project with optional description and prompt.
+- `GET /api/projects/:projectId/tasks` → lists Tasks for the given Project.
+- `POST /api/tasks/:taskId/render` → synchronously renders an image for the Task using Gemini, uploads it to S3, creates a RenderedAsset, and updates Task status.
+- `GET /api/projects/:projectId/rendered-assets` → lists RenderedAssets for the given Project.
 
 ## Frontend (client)
 
@@ -89,7 +158,16 @@ npm install
 npm run dev
 ```
 
-By default Vite will serve on port 5173. The app currently renders a simple Studio dashboard and calls `/api/spaces`, which returns an empty list from the backend.
+By default Vite will serve on port 5173.
+
+The app currently:
+
+- Calls `/api/auth/me` on load to detect an existing session.
+- Provides simple login/register forms wired to `/api/auth/login` and `/api/auth/register`.
+- Shows a Spaces dashboard backed by `/api/spaces` where authenticated users can create and list their spaces.
+- Allows selecting a Space and, for the selected Space, viewing and creating Projects backed by `/api/spaces/:spaceId/projects`.
+- Shows simple Space-level character and scene lists per Space, with forms to add new definitions.
+- Provides an “Import all characters & scenes into selected project” action that clones Space-level definitions into the selected Project using `/api/projects/:projectId/import`.
 
 ### Build for production
 
@@ -125,4 +203,3 @@ Implementation plans under `agents/implementation/` (starting with `plan_01.md`)
 - Spaces and Projects.
 - Shared Definitions (characters, scenes, styles) and RenderedAssets.
 - Lineage-aware APIs and UI for import, cloning, and variant generation.
-

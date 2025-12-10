@@ -1,0 +1,323 @@
+import type { Request, Response } from 'express';
+import express from 'express';
+import { getSignedUrl } from '@aws-sdk/cloudfront-signer';
+import { getDbPool } from './db.js';
+import type { PublicUser } from './auth_service.js';
+import { attachUserFromToken, requireAuth } from './auth_routes.js';
+import {
+  createRenderedAsset,
+  createTask,
+  listProjectTasks,
+  listRenderedAssetsByProject,
+  updateTaskStatus,
+} from './tasks_service.js';
+import type { RenderedAssetRecord } from './tasks_service.js';
+import { renderImageWithGemini } from './gemini_client.js';
+import { uploadImageToS3 } from './s3_client.js';
+
+type AuthedRequest = Request & { user?: PublicUser };
+
+type ProjectRecord = {
+  id: number;
+  space_id: number;
+};
+
+type TaskWithProject = {
+  id: number;
+  project_id: number;
+  name: string;
+  description: string | null;
+  prompt: string | null;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+  space_id: number;
+};
+
+const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
+
+const maybeSignAssetUrl = (asset: RenderedAssetRecord): RenderedAssetRecord => {
+  const domain = process.env.CF_DOMAIN;
+  const keyPairId = process.env.CF_KEY_PAIR_ID;
+  const privateKey = process.env.CF_PRIVATE_KEY_PEM;
+
+  if (!domain || !keyPairId || !privateKey) {
+    return asset;
+  }
+
+  const trimmedDomain = domain.replace(/\/+$/, '');
+  const baseUrl = `https://${trimmedDomain}/${asset.file_key}`;
+
+  try {
+    const signedUrl = getSignedUrl({
+      url: baseUrl,
+      keyPairId,
+      privateKey,
+      dateLessThan: new Date(Date.now() + SIGNED_URL_TTL_MS).toISOString(),
+    });
+    return { ...asset, file_url: signedUrl };
+  } catch (error: any) {
+    // eslint-disable-next-line no-console
+    console.error('[cdn] Failed to sign CloudFront URL; falling back to plain URL:', error);
+    return { ...asset, file_url: baseUrl };
+  }
+};
+
+const maybeSignAssets = (
+  assets: RenderedAssetRecord[],
+): RenderedAssetRecord[] => assets.map((asset) => maybeSignAssetUrl(asset));
+
+const projectsRouter = express.Router({ mergeParams: true });
+const taskRenderRouter = express.Router({ mergeParams: true });
+
+projectsRouter.use(attachUserFromToken as any);
+projectsRouter.use(requireAuth as any);
+taskRenderRouter.use(attachUserFromToken as any);
+taskRenderRouter.use(requireAuth as any);
+
+const loadOwnedProjectOr404 = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<ProjectRecord | null> => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: 'UNAUTHENTICATED' });
+    return null;
+  }
+
+  const { projectId } = req.params as { projectId?: string };
+  const numericProjectId = projectId ? Number(projectId) : NaN;
+  if (!Number.isFinite(numericProjectId) || numericProjectId <= 0) {
+    res.status(400).json({ error: 'INVALID_PROJECT_ID' });
+    return null;
+  }
+
+  const db = getDbPool();
+  const [rows] = await db.query(
+    `SELECT p.id, p.space_id
+     FROM projects p
+     JOIN spaces s ON s.id = p.space_id
+     WHERE p.id = ? AND s.user_id = ?
+     LIMIT 1`,
+    [numericProjectId, user.id],
+  );
+  const list = rows as ProjectRecord[];
+  if (list.length === 0) {
+    res.status(404).json({ error: 'PROJECT_NOT_FOUND' });
+    return null;
+  }
+
+  return list[0];
+};
+
+const loadOwnedTaskOr404 = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<TaskWithProject | null> => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: 'UNAUTHENTICATED' });
+    return null;
+  }
+
+  const { taskId } = req.params as { taskId?: string };
+  const numericTaskId = taskId ? Number(taskId) : NaN;
+  if (!Number.isFinite(numericTaskId) || numericTaskId <= 0) {
+    res.status(400).json({ error: 'INVALID_TASK_ID' });
+    return null;
+  }
+
+  const db = getDbPool();
+  const [rows] = await db.query(
+    `SELECT t.*, p.space_id
+     FROM tasks t
+     JOIN projects p ON p.id = t.project_id
+     JOIN spaces s ON s.id = p.space_id
+     WHERE t.id = ? AND s.user_id = ?
+     LIMIT 1`,
+    [numericTaskId, user.id],
+  );
+  const list = rows as TaskWithProject[];
+  if (list.length === 0) {
+    res.status(404).json({ error: 'TASK_NOT_FOUND' });
+    return null;
+  }
+
+  return list[0];
+};
+
+// Project-scoped tasks and rendered assets
+
+projectsRouter.post(
+  '/tasks',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const project = await loadOwnedProjectOr404(req, res);
+    if (!project) {
+      return;
+    }
+
+    const { name, description, prompt } = req.body as {
+      name?: string;
+      description?: string | null;
+      prompt?: string | null;
+    };
+
+    if (!name || name.trim().length === 0) {
+      res.status(400).json({ error: 'NAME_REQUIRED' });
+      return;
+    }
+
+    try {
+      const task = await createTask(
+        project.id,
+        name.trim(),
+        description ?? null,
+        prompt ?? null,
+      );
+      res.status(201).json({ task });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[tasks] Create task error:', error);
+      res.status(500).json({ error: 'TASK_CREATE_FAILED' });
+    }
+  },
+);
+
+projectsRouter.get(
+  '/tasks',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const project = await loadOwnedProjectOr404(req, res);
+    if (!project) {
+      return;
+    }
+
+    try {
+      const tasks = await listProjectTasks(project.id);
+      res.status(200).json({ tasks });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[tasks] List tasks error:', error);
+      res.status(500).json({ error: 'TASK_LIST_FAILED' });
+    }
+  },
+);
+
+projectsRouter.get(
+  '/rendered-assets',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const project = await loadOwnedProjectOr404(req, res);
+    if (!project) {
+      return;
+    }
+
+    try {
+      const assets = await listRenderedAssetsByProject(project.id);
+      const signed = maybeSignAssets(assets);
+      res.status(200).json({ assets: signed });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[tasks] List rendered assets error:', error);
+      res.status(500).json({ error: 'RENDERED_ASSET_LIST_FAILED' });
+    }
+  },
+);
+
+// Task render endpoint
+
+taskRenderRouter.post(
+  '/render',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const task = await loadOwnedTaskOr404(req, res);
+    if (!task) {
+      return;
+    }
+
+    let prompt = (req.body as { prompt?: string | null })?.prompt ?? null;
+    if (!prompt || prompt.trim().length === 0) {
+      if (task.prompt && task.prompt.trim().length > 0) {
+        prompt = task.prompt;
+      } else {
+        prompt = `Render an image for project ${task.project_id} / task ${task.id}`;
+      }
+    }
+
+    try {
+      await updateTaskStatus(task.id, 'running');
+
+      const image = await renderImageWithGemini(prompt);
+
+      const timestamp = Date.now();
+      const extension =
+        image.mimeType === 'image/png'
+          ? 'png'
+          : image.mimeType === 'image/jpeg'
+          ? 'jpg'
+          : 'bin';
+
+      const key = `projects/${task.project_id}/tasks/${task.id}/${timestamp}.${extension}`;
+      const uploadResult = await uploadImageToS3(
+        key,
+        image.data,
+        image.mimeType,
+      );
+
+      const metadata = {
+        prompt,
+        mimeType: image.mimeType,
+        model:
+          process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview',
+      };
+
+      const asset = await createRenderedAsset(
+        task.project_id,
+        task.id,
+        'image',
+        uploadResult.key,
+        uploadResult.url,
+        metadata,
+      );
+
+      await updateTaskStatus(task.id, 'completed');
+
+      const db = getDbPool();
+      const [rows] = await db.query(
+        'SELECT * FROM tasks WHERE id = ? LIMIT 1',
+        [task.id],
+      );
+      const list = rows as TaskWithProject[];
+      const updatedTask = list[0];
+
+      const signedAsset = maybeSignAssetUrl(asset);
+
+      res.status(201).json({
+        task: updatedTask,
+        renderedAssets: [signedAsset],
+      });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[tasks] Render task error:', error);
+      try {
+        await updateTaskStatus(task.id, 'failed');
+      } catch {
+        // ignore status update failures
+      }
+
+      if (
+        error instanceof Error &&
+        (error.message === 'GEMINI_NOT_CONFIGURED' ||
+          error.message === 'GEMINI_NO_IMAGE_RETURNED')
+      ) {
+        res.status(500).json({ error: error.message });
+        return;
+      }
+      if (error instanceof Error && error.message === 'S3_NOT_CONFIGURED') {
+        res.status(500).json({ error: 'S3_NOT_CONFIGURED' });
+        return;
+      }
+
+      res.status(500).json({ error: 'TASK_RENDER_FAILED' });
+    }
+  },
+);
+
+export { projectsRouter as projectTasksRouter, taskRenderRouter };
