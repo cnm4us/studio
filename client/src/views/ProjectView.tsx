@@ -394,7 +394,7 @@ export function ProjectView(props: ProjectViewProps) {
                               padding: '0.25rem 0.6rem',
                               borderRadius: '4px',
                               border: 'none',
-                              backgroundColor: '#555',
+                              backgroundColor: '#c62828',
                               color: '#fff',
                               cursor: c.isLocked ? 'default' : 'pointer',
                             }}
@@ -470,7 +470,7 @@ export function ProjectView(props: ProjectViewProps) {
                               padding: '0.25rem 0.6rem',
                               borderRadius: '4px',
                               border: 'none',
-                              backgroundColor: '#555',
+                              backgroundColor: '#c62828',
                               color: '#fff',
                               cursor: s.isLocked ? 'default' : 'pointer',
                             }}
@@ -546,7 +546,7 @@ export function ProjectView(props: ProjectViewProps) {
                               padding: '0.25rem 0.6rem',
                               borderRadius: '4px',
                               border: 'none',
-                              backgroundColor: '#555',
+                              backgroundColor: '#c62828',
                               color: '#fff',
                               cursor: style.isLocked ? 'default' : 'pointer',
                             }}
@@ -663,45 +663,408 @@ export function ProjectView(props: ProjectViewProps) {
             {tasks.map((task) => (
               (() => {
                 const cast = getCastForTask(task.id);
+                const assetsForTask = renderedAssets.filter(
+                  (asset) => asset.task_id === task.id,
+                );
 
                 return (
                   <li
                     key={task.id}
                     style={{
-                      padding: '0.6rem 0',
-                      borderBottom: '1px solid #eee',
+                      listStyle: 'none',
+                      marginBottom: '0.75rem',
                     }}
                   >
                     <div
                       style={{
+                        backgroundColor: '#fdf3e2',
+                        border: '1px solid #d2a679',
+                        borderRadius: '8px',
+                        boxShadow: '0 3px 8px rgba(0, 0, 0, 0.15)',
+                        padding: '0.75rem 0.9rem',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
+                        flexDirection: 'column',
                         gap: '0.5rem',
                       }}
                     >
-                      <div>
-                        <div style={{ fontWeight: 600 }}>{task.name}</div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontWeight: 600,
+                              marginBottom: task.description ? '0.15rem' : 0,
+                            }}
+                          >
+                            {task.name}
+                          </div>
+                          {task.description && (
+                            <div
+                              style={{
+                                fontSize: '0.85rem',
+                                color: '#555',
+                              }}
+                            >
+                              {task.description}
+                            </div>
+                          )}
+                        </div>
                         <div
                           style={{
                             fontSize: '0.85rem',
                             color: '#555',
+                            textAlign: 'right',
                           }}
                         >
                           Status: {task.status}
                         </div>
-                        {task.description && (
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: '0.25rem',
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        <div
+                          style={{
+                            marginBottom: '0.25rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Cast
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.5rem',
+                            marginBottom: '0.35rem',
+                          }}
+                        >
+                          <label>
+                            Add character:{' '}
+                            <select
+                              value=""
+                              onChange={(event) => {
+                                const val = event.target.value;
+                                if (!val) return;
+                                const id = Number(val);
+                                updateCastForTask(task.id, (prev) => {
+                                  if (prev.characters.includes(id)) {
+                                    return prev;
+                                  }
+                                  return {
+                                    ...prev,
+                                    characters: [...prev.characters, id],
+                                  };
+                                });
+                              }}
+                              style={{ padding: '0.2rem 0.4rem' }}
+                            >
+                              <option value="">Select…</option>
+                              {projectCharacters.map((def) => (
+                                <option key={def.id} value={def.id}>
+                                  {def.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Add scene:{' '}
+                            <select
+                              value={cast.sceneId ?? ''}
+                              onChange={(event) => {
+                                const val = event.target.value;
+                                updateCastForTask(task.id, (prev) => ({
+                                  ...prev,
+                                  sceneId: val ? Number(val) : null,
+                                }));
+                              }}
+                              style={{ padding: '0.2rem 0.4rem' }}
+                            >
+                              <option value="">None</option>
+                              {projectScenes.map((def) => (
+                                <option key={def.id} value={def.id}>
+                                  {def.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Add style:{' '}
+                            <select
+                              value={cast.styleId ?? ''}
+                              onChange={(event) => {
+                                const val = event.target.value;
+                                updateCastForTask(task.id, (prev) => ({
+                                  ...prev,
+                                  styleId: val ? Number(val) : null,
+                                }));
+                              }}
+                              style={{ padding: '0.2rem 0.4rem' }}
+                            >
+                              <option value="">None</option>
+                              {projectStyles.map((def) => (
+                                <option key={def.id} value={def.id}>
+                                  {def.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.35rem',
+                            marginBottom: '0.35rem',
+                          }}
+                        >
+                          {cast.characters.map((id) => {
+                            const def = projectCharacters.find(
+                              (c) => c.id === id,
+                            );
+                            if (!def) return null;
+                            return (
+                              <span
+                                key={`char-${id}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.15rem 0.35rem',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#eee',
+                                }}
+                              >
+                                {def.name}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCastForTask(task.id, (prev) => ({
+                                      ...prev,
+                                      characters: prev.characters.filter(
+                                        (cid) => cid !== id,
+                                      ),
+                                    }))
+                                  }
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+
+                          {cast.sceneId != null && (() => {
+                            const def = projectScenes.find(
+                              (s) => s.id === cast.sceneId,
+                            );
+                            if (!def) return null;
+                            return (
+                              <span
+                                key="scene-pill"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.15rem 0.35rem',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#e3f2fd',
+                                }}
+                              >
+                                {def.name}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCastForTask(task.id, (prev) => ({
+                                      ...prev,
+                                      sceneId: null,
+                                    }))
+                                  }
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })()}
+
+                          {cast.styleId != null && (() => {
+                            const def = projectStyles.find(
+                              (s) => s.id === cast.styleId,
+                            );
+                            if (!def) return null;
+                            return (
+                              <span
+                                key="style-pill"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.15rem 0.35rem',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#f3e5f5',
+                                }}
+                              >
+                                {def.name}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCastForTask(task.id, (prev) => ({
+                                      ...prev,
+                                      styleId: null,
+                                    }))
+                                  }
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        <div
+                          style={{
+                            marginBottom: '0.25rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Prompt
+                        </div>
+                        <textarea
+                          value={cast.prompt}
+                          onChange={(event) =>
+                            updateCastForTask(task.id, (prev) => ({
+                              ...prev,
+                              prompt: event.target.value,
+                            }))
+                          }
+                          rows={2}
+                          style={{
+                            width: '100%',
+                            padding: '0.35rem',
+                            fontSize: '0.85rem',
+                          }}
+                        />
+                      </div>
+
+                      {assetsForTask.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: '0.4rem',
+                          }}
+                        >
                           <div
                             style={{
                               fontSize: '0.85rem',
-                              color: '#555',
+                              fontWeight: 600,
+                              marginBottom: '0.25rem',
                             }}
                           >
-                            {task.description}
+                            Rendered assets for this task
                           </div>
-                        )}
-                      </div>
-                      <div>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns:
+                                'repeat(auto-fill, minmax(120px, 1fr))',
+                              gap: '0.5rem',
+                            }}
+                          >
+                            {assetsForTask.map((asset) => (
+                              <div
+                                key={asset.id}
+                                style={{
+                                  border: '1px solid #eee',
+                                  borderRadius: '4px',
+                                  padding: '0.35rem',
+                                  backgroundColor: '#fff',
+                                }}
+                              >
+                                {asset.type === 'image' ? (
+                                  <a
+                                    href={asset.file_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <img
+                                      src={asset.file_url}
+                                      alt=""
+                                      style={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        display: 'block',
+                                      }}
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={asset.file_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: '0.8rem',
+                                    }}
+                                  >
+                                    {asset.file_key}
+                                  </a>
+                                )}
+                                <div
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    color: '#555',
+                                    marginTop: '0.15rem',
+                                  }}
+                                >
+                                  State: {asset.state}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          marginTop: '0.5rem',
+                        }}
+                      >
                         <button
                           type="button"
                           onClick={() =>
@@ -735,256 +1098,6 @@ export function ProjectView(props: ProjectViewProps) {
                             : 'Render'}
                         </button>
                       </div>
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: '0.5rem',
-                        fontSize: '0.85rem',
-                      }}
-                    >
-                      <div
-                        style={{
-                          marginBottom: '0.25rem',
-                          fontWeight: 600,
-                        }}
-                      >
-                        Cast
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '0.5rem',
-                          marginBottom: '0.35rem',
-                        }}
-                      >
-                        <label>
-                          Add character:{' '}
-                          <select
-                            value=""
-                            onChange={(event) => {
-                              const val = event.target.value;
-                              if (!val) return;
-                              const id = Number(val);
-                              updateCastForTask(task.id, (prev) => {
-                                if (prev.characters.includes(id)) {
-                                  return prev;
-                                }
-                                return {
-                                  ...prev,
-                                  characters: [...prev.characters, id],
-                                };
-                              });
-                            }}
-                            style={{ padding: '0.2rem 0.4rem' }}
-                          >
-                            <option value="">Select…</option>
-                            {projectCharacters.map((def) => (
-                              <option key={def.id} value={def.id}>
-                                {def.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Add scene:{' '}
-                          <select
-                            value={cast.sceneId ?? ''}
-                            onChange={(event) => {
-                              const val = event.target.value;
-                              updateCastForTask(task.id, (prev) => ({
-                                ...prev,
-                                sceneId: val ? Number(val) : null,
-                              }));
-                            }}
-                            style={{ padding: '0.2rem 0.4rem' }}
-                          >
-                            <option value="">None</option>
-                            {projectScenes.map((def) => (
-                              <option key={def.id} value={def.id}>
-                                {def.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Add style:{' '}
-                          <select
-                            value={cast.styleId ?? ''}
-                            onChange={(event) => {
-                              const val = event.target.value;
-                              updateCastForTask(task.id, (prev) => ({
-                                ...prev,
-                                styleId: val ? Number(val) : null,
-                              }));
-                            }}
-                            style={{ padding: '0.2rem 0.4rem' }}
-                          >
-                            <option value="">None</option>
-                            {projectStyles.map((def) => (
-                              <option key={def.id} value={def.id}>
-                                {def.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '0.35rem',
-                          marginBottom: '0.35rem',
-                        }}
-                      >
-                        {cast.characters.map((id) => {
-                          const def = projectCharacters.find(
-                            (c) => c.id === id,
-                          );
-                          if (!def) return null;
-                          return (
-                            <span
-                              key={`char-${id}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.15rem 0.35rem',
-                                borderRadius: '999px',
-                                backgroundColor: '#eee',
-                              }}
-                            >
-                              {def.name}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  updateCastForTask(task.id, (prev) => ({
-                                    ...prev,
-                                    characters: prev.characters.filter(
-                                      (cid) => cid !== id,
-                                    ),
-                                  }))
-                                }
-                                style={{
-                                  border: 'none',
-                                  background: 'none',
-                                  padding: 0,
-                                  cursor: 'pointer',
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })}
-
-                        {cast.sceneId != null && (() => {
-                          const def = projectScenes.find(
-                            (s) => s.id === cast.sceneId,
-                          );
-                          if (!def) return null;
-                          return (
-                            <span
-                              key="scene-pill"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.15rem 0.35rem',
-                                borderRadius: '999px',
-                                backgroundColor: '#e3f2fd',
-                              }}
-                            >
-                              {def.name}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  updateCastForTask(task.id, (prev) => ({
-                                    ...prev,
-                                    sceneId: null,
-                                  }))
-                                }
-                                style={{
-                                  border: 'none',
-                                  background: 'none',
-                                  padding: 0,
-                                  cursor: 'pointer',
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })()}
-
-                        {cast.styleId != null && (() => {
-                          const def = projectStyles.find(
-                            (s) => s.id === cast.styleId,
-                          );
-                          if (!def) return null;
-                          return (
-                            <span
-                              key="style-pill"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.15rem 0.35rem',
-                                borderRadius: '999px',
-                                backgroundColor: '#f3e5f5',
-                              }}
-                            >
-                              {def.name}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  updateCastForTask(task.id, (prev) => ({
-                                    ...prev,
-                                    styleId: null,
-                                  }))
-                                }
-                                style={{
-                                  border: 'none',
-                                  background: 'none',
-                                  padding: 0,
-                                  cursor: 'pointer',
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })()}
-                      </div>
-
-                      <div
-                        style={{
-                          marginBottom: '0.25rem',
-                          fontWeight: 600,
-                        }}
-                      >
-                        Prompt
-                      </div>
-                      <textarea
-                        value={cast.prompt}
-                        onChange={(event) =>
-                          updateCastForTask(task.id, (prev) => ({
-                            ...prev,
-                            prompt: event.target.value,
-                          }))
-                        }
-                        rows={2}
-                        style={{
-                          width: '100%',
-                          padding: '0.35rem',
-                          fontSize: '0.85rem',
-                        }}
-                      />
                     </div>
                   </li>
                 );
