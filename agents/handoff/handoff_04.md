@@ -1,0 +1,267 @@
+# Handoff 04 — Cast-Based Renders, Per-Task Assets & Rendered Asset Modal
+
+## 5.1 Thread Summary
+- Purpose: Implement Plans 09–12 work related to:
+  - Per-project Cast-based rendering (multiple characters, single scene/style, per-render prompt).
+  - Stronger Project UI with task “cards”, per-task rendered assets, and a curated global gallery.
+  - In-place review and lifecycle controls for rendered assets (draft/approved/delete) via a modal.
+- Context:
+  - Builds directly on `handoff_02.md` (auth, spaces, projects, definitions, tasks, rendered_assets, S3/Gemini) and `handoff_03.md` (Dashboard / Space / Project views in the client).
+  - The DB schema for `tasks` and `rendered_assets` is already in place; this thread focused on richer usage and UI.
+- Scope:
+  - Backend: refine `tasks_routes`/`tasks_service` to support multi-character casts and rendered asset state updates.
+  - Frontend: extend `App.tsx` and `ProjectView.tsx` for:
+    - Cast selection per Task.
+    - Per-task prompt field and render button.
+    - Per-task rendered assets grid.
+    - Global gallery of **approved** renders only.
+    - Modal overlay to inspect and manage each rendered asset.
+
+---
+
+## 5.2 Implementation Notes
+
+### Backend — Rendered Assets & Cast Metadata
+- `db/migrations.sql`:
+  - `rendered_assets` table already exists with `state ENUM('draft','approved','archived')`. No schema changes in this thread.
+
+- `server/src/tasks_service.ts`:
+  - Existing:
+    - `listProjectTasks(projectId)` — unchanged.
+    - `listRenderedAssetsByProject(projectId)` — returns all rows for the project (filtering moved to routes).
+    - `createRenderedAsset(projectId, taskId, type, fileKey, fileUrl, metadata)` — still inserts with `state = 'draft'`.
+  - New:
+    - `getRenderedAssetById(assetId)`:
+      - `SELECT * FROM rendered_assets WHERE id = ? LIMIT 1`.
+      - Returns `null` if no row found.
+    - `updateRenderedAssetState(assetId, state)`:
+      - `UPDATE rendered_assets SET state = ? WHERE id = ?`.
+      - Accepts `'draft' | 'approved' | 'archived'` (validated at route level).
+
+- `server/src/tasks_routes.ts`:
+  - Existing:
+    - `TaskWithProject` type includes `space_id` for access checks.
+    - `projectsRouter`:
+      - `GET /api/projects/:projectId/tasks` → list tasks for a project.
+      - `POST /api/projects/:projectId/tasks` → create task.
+      - `GET /api/projects/:projectId/rendered-assets` → previously returned all rendered assets.
+    - `taskRenderRouter`:
+      - `POST /api/tasks/:taskId/render`:
+        - Validates task ownership via `loadOwnedTaskOr404`.
+        - Accepts body:
+          - `prompt?: string | null`.
+          - `characterDefinitionId?: number | null` (legacy).
+          - `characterDefinitionIds?: number[] | null` (new).
+          - `sceneDefinitionId?: number | null`.
+          - `styleDefinitionId?: number | null`.
+        - Normalizes `characterDefinitionIds`:
+          - If `characterDefinitionIds` is non-empty → use that.
+          - Else, if `characterDefinitionId` present → wrap as single-element array.
+        - Loads all character definitions (project or space scope, `type='character'`) in one query; similar validation for style and scene if provided.
+        - Builds `finalPrompt` as:
+          - Base user prompt (or fallback to `task.prompt` or a generic default).
+          - `Character details` blocks for each character based on `CharacterAppearanceMetadata`.
+          - Optional `Style details` and `Scene details` blocks.
+        - Calls `renderImageWithGemini(finalPrompt)` and `uploadImageToS3` to store the image at:
+          - `projects/<project_id>/tasks/<task_id>/<timestamp>.<ext>`.
+        - Persists `rendered_assets` row via `createRenderedAsset` with `metadata` including:
+          - `prompt` (full composed prompt).
+          - `mimeType`, `model`.
+          - `characterDefinitionId` (first character, for backward compatibility).
+          - `characterDefinitionIds` (array).
+          - `characterMetadata` (first character’s metadata, legacy).
+          - `characterMetadatas` (array of all character metadata).
+          - `styleDefinitionId`, `styleMetadata`.
+          - `sceneDefinitionId`, `sceneMetadata`.
+        - Returns `201` with:
+          - `task` (updated Task row).
+          - `renderedAssets: [signedAsset]` (single asset, signed by `maybeSignAssetUrl` if CloudFront is configured).
+  - Changes in this thread:
+    - `maybeSignAssetUrl` / `maybeSignAssets` unchanged; still sign with CloudFront when `CF_DOMAIN` + key pair env vars are present.
+    - New `renderedAssetsRouter`:
+      - Mounted under `/api/rendered-assets` (see `server/src/index.ts`).
+      - Authenticated via `attachUserFromToken` + `requireAuth`.
+      - Helper `loadOwnedRenderedAssetOr404`:
+        - Validates ownership via:
+          - `rendered_assets ra → projects p → spaces s` with `s.user_id = currentUser.id`.
+        - On success returns `RenderedAssetRecord` plus `space_id` (unused beyond ownership check).
+      - `PATCH /api/rendered-assets/:assetId`:
+        - Body: `{ state: 'draft' | 'approved' | 'archived' }`.
+        - Validates state; returns `400 INVALID_RENDERED_ASSET_STATE` on bad input.
+        - Calls `updateRenderedAssetState(asset.id, state)` and reloads with `getRenderedAssetById`.
+        - On success: returns `{ asset: maybeSignAssetUrl(updated) }`.
+        - Errors:
+          - `401 UNAUTHENTICATED` if no user.
+          - `404 RENDERED_ASSET_NOT_FOUND` if not owned or missing.
+          - `500 RENDERED_ASSET_UPDATE_FAILED` on DB errors.
+    - `projectsRouter.get('/rendered-assets')`:
+      - Now filters out archived assets:
+        - `const visible = assets.filter(a => a.state !== 'archived');`
+      - Returns only visible assets, signed via `maybeSignAssets`.
+
+- `server/src/index.ts`:
+  - Imports and mounts the new router:
+    - `import { projectTasksRouter, taskRenderRouter, renderedAssetsRouter } from './tasks_routes.js';`
+    - `app.use('/api/projects/:projectId', projectTasksRouter);`
+    - `app.use('/api/tasks/:taskId', taskRenderRouter);`
+    - `app.use('/api/rendered-assets', renderedAssetsRouter);`
+
+### Frontend — Project View, Cast, Prompts & Renders
+
+- `client/src/App.tsx`:
+  - Types:
+    - `RenderedAssetSummary` now assumed to include:
+      - `id`, `project_id`, `task_id`, `type`, `file_key`, `file_url`, `state`.
+  - State:
+    - `renderedAssets`, `assetsLoading`, `assetsError` — as before, but now also updated via the state-change handler.
+  - Loading project renders:
+    - `loadRenderedAssets(projectId)`:
+      - Calls `GET /api/projects/:projectId/rendered-assets`.
+      - On success: `setRenderedAssets(data.assets ?? []);` (already filtered for non-archived server-side).
+  - Cast-based renders & prompts (Plan 11):
+    - `handleRenderTask`:
+      - Accepts `{ taskId, characterIds, sceneId, styleId, prompt }`.
+      - Sends `POST /api/tasks/:taskId/render` with:
+        - `prompt`, `characterDefinitionIds: characterIds`, `sceneDefinitionId`, `styleDefinitionId`.
+      - On success:
+        - Updates the single Task in `tasks` if returned.
+        - Prepends new `renderedAssets` to the existing array:
+          - `setRenderedAssets(prev => [...body.renderedAssets!, ...prev]);`
+  - New handler for rendered asset state changes (Plan 12):
+    - `handleUpdateRenderedAssetState(assetId, state)`:
+      - Calls `PATCH /api/rendered-assets/:assetId` with `{ state }`.
+      - On auth failures:
+        - Clears user/space/project/task/renderedAssets state, sets `assetsError`.
+      - On `RENDERED_ASSET_NOT_FOUND` / `INVALID_RENDERED_ASSET_STATE`:
+        - Sets `assetsError` with a concise message.
+      - On success:
+        - If `state === 'archived'`:
+          - `setRenderedAssets(prev => prev.filter(a => a.id !== assetId));`
+        - Else:
+          - Replaces the matching asset in `renderedAssets` with the updated one.
+  - Project view wiring:
+    - `ProjectView` is rendered when `isProjectRoute` is true.
+    - Props include:
+      - `renderedAssets`, `assetsLoading`, `assetsError`.
+      - `onRenderTask={handleRenderTask}`.
+      - `onUpdateRenderedAssetState={handleUpdateRenderedAssetState}`.
+
+- `client/src/views/ProjectView.tsx`:
+  - Props:
+    - Added `onUpdateRenderedAssetState(assetId, state)` callback.
+  - Local state:
+    - `castByTaskId: Record<number, { characters: number[]; sceneId: number | null; styleId: number | null; prompt: string; }>`:
+      - `getCastForTask(taskId)` + `updateCastForTask(taskId, updater)` helpers.
+    - `selectedRenderedAsset: RenderedAssetSummary | null`:
+      - When set, opens the rendered-asset modal.
+      - `useEffect` keeps this in sync with global `renderedAssets`:
+        - If the asset is removed (e.g., archived/deleted), the modal closes.
+        - If the asset object updates, the modal reflects the new state.
+  - Project assets section:
+    - Uses `projectCharacters`, `projectScenes`, `projectStyles` with `isLocked` to:
+      - Show Name (clickable → details modal).
+      - Status (`Locked`/`Not locked`).
+      - Red `Remove` buttons (disabled when locked).
+  - Tasks & renders for selected project:
+    - Task creation form:
+      - `Task name` (required) and `Description (optional)` only.
+      - Green `Create task` button.
+    - Task list:
+      - Each task is now shown as a “card”:
+        - Light tan background, darker tan border, rounded corners, box shadow.
+        - Header row:
+          - Left: task name (+ description if present).
+          - Right: `Status: <status>`.
+      - Cast section:
+        - Dropdowns:
+          - `Add character` — multiple allowed; each selection appends a character id to the cast if not already present.
+          - `Add scene` — at most one; setting replaces the current scene.
+          - `Add style` — at most one; setting replaces the current style.
+        - Pills:
+          - Characters: gray pill with `name` and `×` to remove.
+          - Scene: blue pill; `×` clears `sceneId`.
+          - Style: purple pill; `×` clears `styleId`.
+      - Prompt:
+        - Label: `Prompt`.
+        - Textarea per task:
+          - Stored in `castByTaskId[taskId].prompt`.
+          - Wrapped in a container with horizontal padding so it has equal spacing from the card’s left and right edges.
+      - Render button:
+        - Blue `Render` button directly under the prompt row, right-aligned.
+        - Calls `onRenderTask({ taskId, characterIds: cast.characters, sceneId, styleId, prompt })`.
+        - Disabled if this task is currently rendering or has `status === 'running'`.
+      - Per-task rendered assets:
+        - `assetsForTask = renderedAssets.filter(a => a.task_id === task.id);`
+        - If non-empty:
+          - Card section “Rendered assets for this task”.
+          - Grid of small cards (dark-gray borders) for each asset:
+            - Thumbnail (image or file-key text) inside a button.
+            - Clicking opens the rendered-asset modal via `setSelectedRenderedAsset(asset)`.
+            - Shows `State: <state>` below.
+  - Global approved rendered assets:
+    - Bottom section headline changed to `Approved rendered assets`.
+    - Filters the global `renderedAssets` prop:
+      - `const approved = renderedAssets.filter(a => a.state === 'approved');`
+    - If `approved.length === 0`:
+      - Shows: “No approved rendered assets yet for this project. Approve a render above to see it here.”
+    - Else:
+      - Renders a similar grid to the per-task section:
+        - Clicking any card opens the modal via `setSelectedRenderedAsset(asset)`.
+        - Shows `State: approved` (or updated state if changed).
+  - Rendered asset modal (Plan 12):
+    - Overlay:
+      - Full-screen, semi-transparent dark background, centered dialog, `z-index` above definition modal.
+    - Content:
+      - Close button:
+        - Top-right, circular black button:
+          - `width/height: 28px`, `borderRadius: '50%'`, black background with white border, bold white `×` centered.
+      - Main area:
+        - If `type === 'image'` → shows full-size image (within max width/height).
+        - Else → shows `file_key` as a link to open in a new tab.
+      - Footer:
+        - Left: `State: <current state>` label.
+        - Right: button cluster:
+          - `Draft` (gray): calls `onUpdateRenderedAssetState(id, 'draft')` and closes the modal.
+          - `Approve` (green): calls `onUpdateRenderedAssetState(id, 'approved')` and closes the modal.
+          - `Delete` (red): calls `onUpdateRenderedAssetState(id, 'archived')`.
+            - Deletion is a soft-delete (archive):
+              - The server sets `state='archived'`.
+              - Client removes the asset from `renderedAssets`, causing it to vanish from both per-task and global grids, and closing the modal via the `useEffect` sync.
+
+---
+
+## 5.3 Open Questions / Deferred Tasks
+- Hard delete vs. archive:
+  - Currently “Delete” is implemented as soft delete (`state='archived'`), with S3 objects left intact.
+  - A future maintenance script or admin UI could safely delete S3 objects and/or fully remove archived rows.
+- Asset promotion:
+  - We have a clear distinction between `rendered_assets` (per-task renders) and canonical `assets` (user-curated assets), but no explicit “promote render to asset” workflow yet.
+  - Locking behavior on promoted assets and definitions is only partially implemented (locking applies to space-level canonical definitions with project children; not yet to project-level definitions used in renders).
+- Deep linking:
+  - Project view still depends on the current in-memory `selectedSpaceId`/`selectedProjectId` logic; robust deep-linking to `#/projects/:id` may require `GET /api/projects/:id` to infer the owning space and pre-load context.
+- Concurrency:
+  - Rendered asset state updates are optimistic per request. There’s no explicit conflict handling if multiple sessions try to change the same asset’s state concurrently.
+
+---
+
+## 5.4 Suggestions for Next Threadself
+- If you’re building on the **render pipeline**:
+  - Implement a “promote to Asset” flow:
+    - UI: button in the rendered-asset modal to create a canonical Asset from a render.
+    - Backend: new `assets` table (if not already present) and API endpoints; link back to `rendered_assets` via metadata.
+  - Tighten locking rules:
+    - Once a render is promoted to an Asset, consider locking the underlying project definitions to preserve consistency.
+- If you’re focused on **UX/visual design**:
+  - Extract `ProjectView` into smaller components (e.g., `ProjectAssetsPanel`, `TaskCard`, `RenderedAssetModal`) to reduce the ~3k-line file complexity.
+  - Add breadcrumbs or a more discoverable navigation pattern for Dashboard / Space / Project views.
+  - Add simple pagination or lazy-loading for rendered assets if the gallery becomes large.
+- If you’re expanding **testing/robustness**:
+  - Add integration tests around:
+    - `POST /api/tasks/:id/render` (multi-character casts, scenes, styles).
+    - `PATCH /api/rendered-assets/:id` (state transitions and ownership).
+    - Frontend flows for:
+      - Creating a task with a cast.
+      - Rendering multiple images.
+      - Approving/deleting renders and verifying the per-task and global galleries update correctly.
+  - Consider adding a small “debug view” for `rendered_assets.metadata` in the modal (read-only JSON) for internal validation while iterating on prompts and cast behavior.
+
