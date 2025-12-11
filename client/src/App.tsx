@@ -151,7 +151,7 @@ function App() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState('');
-  const [newTaskPrompt, setNewTaskPrompt] = useState('');
+  // Prompt is now per-task/per-render; no global task prompt state
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [createTaskLoading, setCreateTaskLoading] = useState(false);
   const [createTaskError, setCreateTaskError] = useState<string | null>(null);
@@ -193,14 +193,8 @@ function App() {
   const [spaceStyles, setSpaceStyles] = useState<DefinitionSummary[]>([]);
   const [newStyleName, setNewStyleName] = useState('');
   const [newStyleDescription, setNewStyleDescription] = useState('');
-  const [selectedStyleId, setSelectedStyleId] = useState<number | null>(null);
   const [newStyleRenderDomain, setNewStyleRenderDomain] = useState('');
   const [newStyleGenres, setNewStyleGenres] = useState('');
-
-  const [selectedCharacterId, setSelectedCharacterId] = useState<
-    number | null
-  >(null);
-  const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
 
   const [projectCharacters, setProjectCharacters] = useState<
     DefinitionSummary[]
@@ -554,9 +548,6 @@ function App() {
       setProjectCharacters([]);
       setProjectScenes([]);
       setSpaceStyles([]);
-      setSelectedStyleId(null);
-      setSelectedCharacterId(null);
-      setSelectedSceneId(null);
     }
   }, [user]);
 
@@ -851,9 +842,6 @@ function App() {
     setProjectCharacters([]);
     setProjectScenes([]);
     setSpaceStyles([]);
-    setSelectedStyleId(null);
-    setSelectedCharacterId(null);
-    setSelectedSceneId(null);
     void loadProjects(spaceId);
     void loadDefinitions(spaceId);
   };
@@ -1307,9 +1295,6 @@ function App() {
           setProjectStyles((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
-          if (selectedStyleId === definitionId) {
-            setSelectedStyleId(null);
-          }
         }
         return;
       }
@@ -1365,7 +1350,7 @@ function App() {
         body: JSON.stringify({
           name: newTaskName,
           description: newTaskDescription || null,
-          prompt: newTaskPrompt || null,
+          prompt: null,
         }),
       });
 
@@ -1399,7 +1384,6 @@ function App() {
 
       setTasks((prev) => [body.task as TaskSummary, ...prev]);
       setNewTaskName('');
-      setNewTaskPrompt('');
       setNewTaskDescription('');
     } catch (err) {
       const message =
@@ -1410,8 +1394,16 @@ function App() {
     }
   };
 
-  const handleRenderTask = async (taskId: number): Promise<void> => {
+  const handleRenderTask = async (params: {
+    taskId: number;
+    characterIds: number[];
+    sceneId: number | null;
+    styleId: number | null;
+    prompt: string | null;
+  }): Promise<void> => {
     if (!user) return;
+
+    const { taskId, characterIds, sceneId, styleId, prompt } = params;
 
     setRenderError(null);
     setRenderingTaskId(taskId);
@@ -1422,9 +1414,10 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          styleDefinitionId: selectedStyleId ?? null,
-          characterDefinitionId: selectedCharacterId ?? null,
-          sceneDefinitionId: selectedSceneId ?? null,
+          prompt: prompt ?? null,
+          styleDefinitionId: styleId ?? null,
+          characterDefinitionIds: characterIds ?? [],
+          sceneDefinitionId: sceneId ?? null,
         }),
       });
 
@@ -1765,12 +1758,6 @@ function App() {
                 projectCharacters={projectCharacters}
                 projectScenes={projectScenes}
                 projectStyles={projectStyles}
-                selectedCharacterId={selectedCharacterId}
-                setSelectedCharacterId={setSelectedCharacterId}
-                selectedSceneId={selectedSceneId}
-                setSelectedSceneId={setSelectedSceneId}
-                selectedStyleId={selectedStyleId}
-                setSelectedStyleId={setSelectedStyleId}
                 spaceCharacters={spaceCharacters}
                 spaceScenes={spaceScenes}
                 spaceStyles={spaceStyles}
@@ -1779,8 +1766,6 @@ function App() {
                 tasks={tasks}
                 newTaskName={newTaskName}
                 setNewTaskName={setNewTaskName}
-                newTaskPrompt={newTaskPrompt}
-                setNewTaskPrompt={setNewTaskPrompt}
                 newTaskDescription={newTaskDescription}
                 setNewTaskDescription={setNewTaskDescription}
                 createTaskLoading={createTaskLoading}

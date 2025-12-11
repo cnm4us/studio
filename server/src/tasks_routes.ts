@@ -264,6 +264,7 @@ taskRenderRouter.post(
     const input = req.body as {
       prompt?: string | null;
       characterDefinitionId?: number | null;
+      characterDefinitionIds?: number[] | null;
       styleDefinitionId?: number | null;
       sceneDefinitionId?: number | null;
     };
@@ -282,29 +283,41 @@ taskRenderRouter.post(
 
       const db = getDbPool();
 
-      let characterDefinition: any | null = null;
+      let characterDefinitions: any[] = [];
       let styleDefinition: any | null = null;
       let sceneDefinition: any | null = null;
 
-      if (input?.characterDefinitionId) {
+      const characterIdsRaw =
+        (Array.isArray(input?.characterDefinitionIds)
+          ? input?.characterDefinitionIds
+          : []) ?? [];
+      const characterIds: number[] =
+        characterIdsRaw.length > 0
+          ? characterIdsRaw
+              .map((id) => Number(id))
+              .filter((id) => Number.isFinite(id) && id > 0)
+          : input?.characterDefinitionId
+          ? [input.characterDefinitionId]
+          : [];
+
+      if (characterIds.length > 0) {
         const [rows] = await db.query(
           `SELECT *
            FROM definitions
-           WHERE id = ?
+           WHERE id IN (?)
              AND (
                (scope = 'project' AND project_id = ?)
                OR (scope = 'space' AND space_id = ?)
              )
-             AND type = 'character'
-           LIMIT 1`,
-          [input.characterDefinitionId, task.project_id, task.space_id],
+             AND type = 'character'`,
+          [characterIds, task.project_id, task.space_id],
         );
         const list = rows as any[];
-        if (list.length === 0) {
+        if (list.length === 0 || list.length !== characterIds.length) {
           res.status(400).json({ error: 'CHARACTER_DEFINITION_NOT_FOUND' });
           return;
         }
-        characterDefinition = list[0];
+        characterDefinitions = list;
       }
 
       if (input?.styleDefinitionId) {
@@ -349,22 +362,27 @@ taskRenderRouter.post(
         sceneDefinition = list[0];
       }
 
-      const characterMeta =
-        (characterDefinition?.metadata as CharacterAppearanceMetadata | null) ??
-        null;
+      const characterMetas: CharacterAppearanceMetadata[] = characterDefinitions.map(
+        (def) =>
+          (def?.metadata as CharacterAppearanceMetadata | null) ?? ({} as any),
+      );
       const styleMeta =
         (styleDefinition?.metadata as StyleDefinitionMetadata | null) ?? null;
       const sceneMeta = sceneDefinition?.metadata ?? null;
 
       const promptParts: string[] = [prompt];
 
-      if (characterDefinition) {
-        const coreName = characterMeta?.core_identity?.name;
-        promptParts.push(
-          `Character details: ${
-            coreName ? `${coreName}, ` : ''
-          }appearance=${JSON.stringify(characterMeta ?? {})}`,
-        );
+      if (characterDefinitions.length > 0) {
+        for (let i = 0; i < characterDefinitions.length; i += 1) {
+          const def = characterDefinitions[i];
+          const meta = characterMetas[i] ?? null;
+          const coreName = meta?.core_identity?.name;
+          promptParts.push(
+            `Character details: ${
+              coreName ? `${coreName}, ` : ''
+            }appearance=${JSON.stringify(meta ?? {})}`,
+          );
+        }
       }
 
       if (styleDefinition) {
@@ -403,9 +421,14 @@ taskRenderRouter.post(
         mimeType: image.mimeType,
         model:
           process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview',
-        characterDefinitionId: characterDefinition?.id ?? null,
+        characterDefinitionId:
+          characterDefinitions[0]?.id ?? null,
+        characterDefinitionIds: characterDefinitions.map(
+          (def) => def.id as number,
+        ),
         styleDefinitionId: styleDefinition?.id ?? null,
-        characterMetadata: characterMeta ?? null,
+        characterMetadata: characterMetas[0] ?? null,
+        characterMetadatas: characterMetas,
         styleMetadata: styleMeta ?? null,
         sceneDefinitionId: sceneDefinition?.id ?? null,
         sceneMetadata: sceneMeta ?? null,
