@@ -32,7 +32,8 @@ Treat this document as the TOC; detailed steps live in the individual `plan_nn.m
   - Add a minimal auth/session model (can be simple email/password; fine to evolve later).
   - Update the frontend dashboard to list Spaces and allow creating a Space.
 - Plans:
-  - `plan_02.md` – Spaces & Minimal Auth Skeleton.
+  - `plan_02.md` – Spaces & Minimal Auth Skeleton  
+    - Status: Completed (see `agents/handoff/handoff_02.md`)
 
 ---
 
@@ -51,7 +52,8 @@ Treat this document as the TOC; detailed steps live in the individual `plan_nn.m
   - Decide on the initial representation for CharacterDefinitions and SceneDefinitions (per-type tables vs. a shared `definitions` table).
   - Implement a simple “Import Characters/Scenes from Space into Project” flow using `parent_id` + `root_id` lineage.
 - Plans:
-  - `plan_03.md` – Projects & basic import from Spaces (future).
+  - `plan_03.md` – Projects & basic import from Spaces  
+    - Status: Completed (see `agents/handoff/handoff_02.md` and `handoff_03.md`)
 
 ---
 
@@ -69,7 +71,8 @@ Treat this document as the TOC; detailed steps live in the individual `plan_nn.m
   - Ensure Space assets are immutable once canonical, and that Project clones never mutate Space assets directly.
   - Add simple UI indicators for lineage and state.
 - Plans:
-  - `plan_04.md` – Definitions, lineage fields, and lifecycle states (future).
+  - `plan_04.md` – Definitions, lineage fields, and lifecycle states  
+    - Status: Implemented in v1 form (unified `definitions` table with `root_id`/`parent_id`, simple `isCanonical`/`isLocked` flags; advanced lifecycle states still TODO, see `roadmap_v2.md`)
 
 ---
 
@@ -87,7 +90,12 @@ Treat this document as the TOC; detailed steps live in the individual `plan_nn.m
   - Implement `POST /projects/{projectId}/tasks` and `POST /tasks/{taskId}/render` endpoints that call the image model and persist RenderedAssets with lineage metadata.
   - Build a simple UI for viewing Task history and RenderedAssets per Project.
 - Plans:
-  - `plan_05.md` – Tasks, rendered assets, and basic render pipeline (future).
+  - `plan_05.md` – Tasks, rendered assets, and basic render pipeline  
+    - Status: Completed (DB tables, render endpoint, S3/Gemini integration, project-level gallery)
+  - `plan_11.md` – Cast-based renders & per-render prompts  
+    - Status: Completed (per-task cast UI, multi-character support, per-render prompts and metadata)
+  - `plan_12.md` – Rendered asset modal & state controls  
+    - Status: Completed (modal viewer, draft/approve/delete states, approved-only global gallery)
 
 ---
 
@@ -118,3 +126,17 @@ Treat this document as the TOC; detailed steps live in the individual `plan_nn.m
   - Reference the relevant architecture sections explicitly in the plan’s Overview.
   - Keep scope tight so each plan can be executed and completed without leaking into the next phase.
 
+---
+
+## Status Snapshot & Where to Continue
+
+- Phases 1–3: Completed and stable (bootstrap, auth, spaces, projects, basic imports).
+- Phase 4: Partially implemented:
+  - Unified `definitions` table, lineage fields, and basic `isCanonical` / `isLocked` behavior are in place.
+  - Full lifecycle states and clone hierarchies should follow `roadmap_v2.md` (asset pipeline spec).
+- Phase 5: Vertical slice implemented:
+  - Tasks + rendered_assets + S3/Gemini, per-task cast model, per-task and global (approved-only) galleries, and rendered asset state transitions via modal.
+- Next phases / next thread:
+  - Use `agents/implementation/roadmap_v2.md` plus `handoff_04.md` to drive:
+    - Task-level clones, project/space clone semantics, and full locking rules.
+    - “Promote render to Asset” flows and canonical render handling.

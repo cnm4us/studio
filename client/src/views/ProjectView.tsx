@@ -989,21 +989,68 @@ export function ProjectView(props: ProjectViewProps) {
                         >
                           Prompt
                         </div>
-                        <textarea
-                          value={cast.prompt}
-                          onChange={(event) =>
-                            updateCastForTask(task.id, (prev) => ({
-                              ...prev,
-                              prompt: event.target.value,
-                            }))
-                          }
-                          rows={2}
+                        <div
                           style={{
-                            width: '100%',
-                            padding: '0.35rem',
-                            fontSize: '0.85rem',
+                            padding: '0 0.5rem',
                           }}
-                        />
+                        >
+                          <textarea
+                            value={cast.prompt}
+                            onChange={(event) =>
+                              updateCastForTask(task.id, (prev) => ({
+                                ...prev,
+                                prompt: event.target.value,
+                              }))
+                            }
+                            rows={2}
+                            style={{
+                              width: '100%',
+                              padding: '0.35rem',
+                              fontSize: '0.85rem',
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          marginTop: '0.5rem',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onRenderTask({
+                              taskId: task.id,
+                              characterIds: cast.characters,
+                              sceneId: cast.sceneId,
+                              styleId: cast.styleId,
+                              prompt: cast.prompt || null,
+                            })
+                          }
+                          disabled={
+                            renderingTaskId === task.id ||
+                            task.status === 'running'
+                          }
+                          style={{
+                            padding: '0.35rem 0.9rem',
+                            borderRadius: '4px',
+                            border: 'none',
+                            backgroundColor: '#1565c0',
+                            color: '#fff',
+                            cursor:
+                              renderingTaskId === task.id ||
+                              task.status === 'running'
+                                ? 'default'
+                                : 'pointer',
+                          }}
+                        >
+                          {renderingTaskId === task.id
+                            ? 'Rendering…'
+                            : 'Render'}
+                        </button>
                       </div>
 
                       {assetsForTask.length > 0 && (
@@ -1087,47 +1134,6 @@ export function ProjectView(props: ProjectViewProps) {
                           </div>
                         </div>
                       )}
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'flex-end',
-                          marginTop: '0.5rem',
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onRenderTask({
-                              taskId: task.id,
-                              characterIds: cast.characters,
-                              sceneId: cast.sceneId,
-                              styleId: cast.styleId,
-                              prompt: cast.prompt || null,
-                            })
-                          }
-                          disabled={
-                            renderingTaskId === task.id ||
-                            task.status === 'running'
-                          }
-                          style={{
-                            padding: '0.35rem 0.9rem',
-                            borderRadius: '4px',
-                            border: 'none',
-                            backgroundColor: '#1565c0',
-                            color: '#fff',
-                            cursor:
-                              renderingTaskId === task.id ||
-                              task.status === 'running'
-                                ? 'default'
-                                : 'pointer',
-                          }}
-                        >
-                          {renderingTaskId === task.id
-                            ? 'Rendering…'
-                            : 'Render'}
-                        </button>
-                      </div>
                     </div>
                   </li>
                 );
@@ -1154,7 +1160,7 @@ export function ProjectView(props: ProjectViewProps) {
             paddingTop: '1rem',
           }}
         >
-          <h5 style={{ marginTop: 0 }}>Rendered assets</h5>
+          <h5 style={{ marginTop: 0 }}>Approved rendered assets</h5>
 
           {assetsLoading && <p>Loading renders…</p>}
           {assetsError && (
@@ -1167,72 +1173,85 @@ export function ProjectView(props: ProjectViewProps) {
               {assetsError}
             </p>
           )}
-          {!assetsLoading && !assetsError && renderedAssets.length === 0 && (
-            <p>No rendered assets yet for this project. Run a render above.</p>
-          )}
-          {!assetsLoading && !assetsError && renderedAssets.length > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                gap: '0.75rem',
-              }}
-            >
-              {renderedAssets.map((asset) => (
-                <div
-                  key={asset.id}
-                  style={{
-                    border: '1px solid #555',
-                    borderRadius: '4px',
-                    padding: '0.5rem',
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRenderedAsset(asset)}
-                    style={{
-                      border: 'none',
-                      padding: 0,
-                      margin: 0,
-                      background: 'none',
-                      cursor: 'pointer',
-                      width: '100%',
-                      textAlign: 'left',
-                    }}
-                  >
-                    {asset.type === 'image' ? (
-                      <img
-                        src={asset.file_url}
-                        alt=""
-                        style={{
-                          width: '100%',
-                          height: 'auto',
-                          display: 'block',
-                        }}
-                      />
-                    ) : (
-                      <span
-                        style={{
-                          textDecoration: 'underline',
-                        }}
-                      >
-                        {asset.file_key}
-                      </span>
-                    )}
-                  </button>
+          {!assetsLoading && !assetsError && (() => {
+            const approved = renderedAssets.filter(
+              (asset) => asset.state === 'approved',
+            );
+
+            if (approved.length === 0) {
+              return (
+                <p>
+                  No approved rendered assets yet for this project. Approve a
+                  render above to see it here.
+                </p>
+              );
+            }
+
+            return (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    'repeat(auto-fill, minmax(150px, 1fr))',
+                  gap: '0.75rem',
+                }}
+              >
+                {approved.map((asset) => (
                   <div
+                    key={asset.id}
                     style={{
-                      fontSize: '0.8rem',
-                      color: '#555',
-                      marginTop: '0.25rem',
+                      border: '1px solid #555',
+                      borderRadius: '4px',
+                      padding: '0.5rem',
                     }}
                   >
-                    State: {asset.state}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRenderedAsset(asset)}
+                      style={{
+                        border: 'none',
+                        padding: 0,
+                        margin: 0,
+                        background: 'none',
+                        cursor: 'pointer',
+                        width: '100%',
+                        textAlign: 'left',
+                      }}
+                    >
+                      {asset.type === 'image' ? (
+                        <img
+                          src={asset.file_url}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: 'auto',
+                            display: 'block',
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          {asset.file_key}
+                        </span>
+                      )}
+                    </button>
+                    <div
+                      style={{
+                        fontSize: '0.8rem',
+                        color: '#555',
+                        marginTop: '0.25rem',
+                      }}
+                    >
+                      State: {asset.state}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
       {detailsDefinition && (
@@ -1330,11 +1349,21 @@ export function ProjectView(props: ProjectViewProps) {
                 position: 'absolute',
                 top: '0.4rem',
                 right: '0.4rem',
-                border: 'none',
-                background: 'none',
+                border: '2px solid #fff',
+                backgroundColor: '#000',
                 cursor: 'pointer',
                 fontSize: '1.1rem',
                 lineHeight: 1,
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                padding: 0,
+                boxSizing: 'border-box',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
               }}
             >
               ×
@@ -1391,12 +1420,13 @@ export function ProjectView(props: ProjectViewProps) {
               >
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     onUpdateRenderedAssetState(
                       selectedRenderedAsset.id,
                       'draft',
-                    )
-                  }
+                    );
+                    setSelectedRenderedAsset(null);
+                  }}
                   style={{
                     padding: '0.3rem 0.7rem',
                     borderRadius: '4px',
@@ -1411,12 +1441,13 @@ export function ProjectView(props: ProjectViewProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     onUpdateRenderedAssetState(
                       selectedRenderedAsset.id,
                       'approved',
-                    )
-                  }
+                    );
+                    setSelectedRenderedAsset(null);
+                  }}
                   style={{
                     padding: '0.3rem 0.7rem',
                     borderRadius: '4px',

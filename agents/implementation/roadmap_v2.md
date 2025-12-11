@@ -372,3 +372,36 @@ Task Base Render Clone
 Task Variant Render Clone
     ↓ generate
 New Project Render (w/ task_id)
+
+-------------------------------------------
+7. Implementation Status Snapshot (Dec 2025)
+-------------------------------------------
+
+This document is the **north star spec**; implementation is a partial vertical slice:
+
+- Implemented:
+  - Spaces, Projects, unified `definitions` table with `root_id` / `parent_id`.
+  - Minimal canonical vs. project-level definitions and simple `isLocked` rules for Space-level canonicals with project children.
+  - Tasks + `rendered_assets` tables with:
+    - Project-scoped tasks.
+    - Per-task renders stored as `rendered_assets` rows with:
+      - `project_id`, `task_id`, `file_key`, `file_url`, `metadata`, `state`.
+    - Multi-character cast support and per-render prompt snapshots in `metadata`.
+  - S3 + CloudFront integration for serving rendered images, with signed URLs when configured.
+  - Frontend:
+    - Dashboard / Space / Project views (hash-based routing).
+    - Project view with per-task “cards”, per-task rendered assets, and a global **approved-only** gallery.
+    - Rendered asset modal with `draft` / `approved` / `archived` state transitions.
+
+- Not yet implemented (future work guided by this spec):
+  - Full canonical / base clone / working clone hierarchy:
+    - Space → Project → Task clones for definitions and renders.
+  - Neutral flags and strict Character vs Scene vs Compilation render classification.
+  - Automatic lock/unlock propagation across the full Space → Project → Task → Render graph.
+  - Task-level clones and explicit Task deletion semantics (with automatic unlock rules).
+  - Import flows for canonical renders (Space → Project) and “promote render to Asset” workflows.
+  - Rich audit/replay UI for complete lineage trees.
+
+Next thread should:
+- Use `agents/handoff/handoff_04.md` + this status section to avoid duplicating implemented behavior.
+- Choose a focused slice from the “Not yet implemented” list (e.g., neutral flags + render classification, or Task-level clones) and draft the next `plan_nn.md` aligned with this spec.
