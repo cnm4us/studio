@@ -1,19 +1,24 @@
 import type { FormEvent } from 'react';
+import { useState } from 'react';
+import type { DefinitionSummary } from '../App';
 
 type ProjectViewProps = {
   importLoading: boolean;
   importError: string | null;
   projectDefinitionsLoading: boolean;
   projectDefinitionsError: string | null;
-  projectCharacters: any[];
-  projectScenes: any[];
+  projectCharacters: DefinitionSummary[];
+  projectScenes: DefinitionSummary[];
+  projectStyles: DefinitionSummary[];
   selectedCharacterId: number | null;
   setSelectedCharacterId: (id: number | null) => void;
   selectedSceneId: number | null;
   setSelectedSceneId: (id: number | null) => void;
   selectedStyleId: number | null;
   setSelectedStyleId: (id: number | null) => void;
-  spaceStyles: any[];
+  spaceCharacters: DefinitionSummary[];
+  spaceScenes: DefinitionSummary[];
+  spaceStyles: DefinitionSummary[];
   tasksLoading: boolean;
   tasksError: string | null;
   tasks: any[];
@@ -33,6 +38,14 @@ type ProjectViewProps = {
   onImportDefinitionsToProject: (event: FormEvent) => void;
   onCreateTask: (event: FormEvent) => void;
   onRenderTask: (taskId: number) => void;
+  onImportSingleDefinition: (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ) => void;
+  onRemoveProjectDefinition: (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ) => void;
 };
 
 export function ProjectView(props: ProjectViewProps) {
@@ -43,12 +56,15 @@ export function ProjectView(props: ProjectViewProps) {
     projectDefinitionsError,
     projectCharacters,
     projectScenes,
+    projectStyles,
     selectedCharacterId,
     setSelectedCharacterId,
     selectedSceneId,
     setSelectedSceneId,
     selectedStyleId,
     setSelectedStyleId,
+    spaceCharacters,
+    spaceScenes,
     spaceStyles,
     tasksLoading,
     tasksError,
@@ -69,7 +85,47 @@ export function ProjectView(props: ProjectViewProps) {
     onImportDefinitionsToProject,
     onCreateTask,
     onRenderTask,
+    onImportSingleDefinition,
+    onRemoveProjectDefinition,
   } = props;
+
+  const [selectedSpaceCharacterId, setSelectedSpaceCharacterId] = useState<
+    number | ''
+  >('');
+  const [selectedSpaceSceneId, setSelectedSpaceSceneId] = useState<
+    number | ''
+  >('');
+  const [selectedSpaceStyleId, setSelectedSpaceStyleId] = useState<
+    number | ''
+  >('');
+  const [detailsDefinition, setDetailsDefinition] =
+    useState<DefinitionSummary | null>(null);
+
+  const importedCharacterParentIds = new Set(
+    projectCharacters
+      .map((c) => c.parentId)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  );
+  const importedSceneParentIds = new Set(
+    projectScenes
+      .map((s) => s.parentId)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  );
+  const importedStyleParentIds = new Set(
+    projectStyles
+      .map((style) => style.parentId)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  );
+
+  const availableSpaceCharacters = spaceCharacters.filter(
+    (c) => !importedCharacterParentIds.has(c.id),
+  );
+  const availableSpaceScenes = spaceScenes.filter(
+    (s) => !importedSceneParentIds.has(s.id),
+  );
+  const availableSpaceStyles = spaceStyles.filter(
+    (style) => !importedStyleParentIds.has(style.id),
+  );
 
   return (
     <div
@@ -99,12 +155,115 @@ export function ProjectView(props: ProjectViewProps) {
 
       <div
         style={{
+          marginTop: '1rem',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          fontSize: '0.9rem',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <label>
+            Add character:{' '}
+            <select
+              value={selectedSpaceCharacterId}
+              disabled={importLoading}
+              onChange={(event) => {
+                const val = event.target.value;
+                if (!val) {
+                  setSelectedSpaceCharacterId('');
+                  return;
+                }
+                const id = Number(val);
+                setSelectedSpaceCharacterId(id);
+                if (!importLoading) {
+                  onImportSingleDefinition('character', id);
+                  setSelectedSpaceCharacterId('');
+                }
+              }}
+              style={{ padding: '0.2rem 0.4rem' }}
+            >
+              <option value="">Select…</option>
+              {availableSpaceCharacters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <label>
+            Add scene:{' '}
+            <select
+              value={selectedSpaceSceneId}
+              disabled={importLoading}
+              onChange={(event) => {
+                const val = event.target.value;
+                if (!val) {
+                  setSelectedSpaceSceneId('');
+                  return;
+                }
+                const id = Number(val);
+                setSelectedSpaceSceneId(id);
+                if (!importLoading) {
+                  onImportSingleDefinition('scene', id);
+                  setSelectedSpaceSceneId('');
+                }
+              }}
+              style={{ padding: '0.2rem 0.4rem' }}
+            >
+              <option value="">Select…</option>
+              {availableSpaceScenes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <label>
+            Add style:{' '}
+            <select
+              value={selectedSpaceStyleId}
+              disabled={importLoading}
+              onChange={(event) => {
+                const val = event.target.value;
+                if (!val) {
+                  setSelectedSpaceStyleId('');
+                  return;
+                }
+                const id = Number(val);
+                setSelectedSpaceStyleId(id);
+                if (!importLoading) {
+                  onImportSingleDefinition('style', id);
+                  setSelectedSpaceStyleId('');
+                }
+              }}
+              style={{ padding: '0.2rem 0.4rem' }}
+            >
+              <option value="">Select…</option>
+              {availableSpaceStyles.map((style) => (
+                <option key={style.id} value={style.id}>
+                  {style.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div
+        style={{
           marginTop: '1.5rem',
           borderTop: '1px solid #eee',
           paddingTop: '1rem',
         }}
       >
-        <h4 style={{ marginTop: 0 }}>Project assets (imported characters & scenes)</h4>
+        <h4 style={{ marginTop: 0 }}>Project assets (characters, scenes & styles)</h4>
 
         {projectDefinitionsLoading && <p>Loading project assets…</p>}
         {projectDefinitionsError && (
@@ -120,19 +279,22 @@ export function ProjectView(props: ProjectViewProps) {
         {!projectDefinitionsLoading &&
           !projectDefinitionsError &&
           projectCharacters.length === 0 &&
-          projectScenes.length === 0 && (
+          projectScenes.length === 0 &&
+          projectStyles.length === 0 && (
             <p>
-              No imported characters or scenes yet for this project. Use the import
-              button above.
+              No imported characters, scenes, or styles yet for this project. Use
+              the import controls above.
             </p>
           )}
         {!projectDefinitionsLoading &&
           !projectDefinitionsError &&
-          (projectCharacters.length > 0 || projectScenes.length > 0) && (
+          (projectCharacters.length > 0 ||
+            projectScenes.length > 0 ||
+            projectStyles.length > 0) && (
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: '1fr 1fr 1fr',
                 gap: '1rem',
                 marginBottom: '1.5rem',
               }}
@@ -154,26 +316,53 @@ export function ProjectView(props: ProjectViewProps) {
                         borderBottom: '1px solid #eee',
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>{c.name}</div>
                       <div
                         style={{
-                          fontSize: '0.8rem',
-                          color: '#777',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '0.75rem',
                         }}
                       >
-                        Imported from Space asset
-                        {c.parentId ? ` #${c.parentId}` : ''}
-                      </div>
-                      {c.description && (
-                        <div
-                          style={{
-                            fontSize: '0.85rem',
-                            color: '#555',
-                          }}
-                        >
-                          {c.description}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setDetailsDefinition(c)}
+                            style={{
+                              fontWeight: 600,
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              margin: 0,
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {c.name}
+                          </button>
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              color: '#777',
+                            }}
+                          >
+                            Status:{' '}
+                            {c.isLocked ? 'Locked' : 'Not locked'}
+                          </div>
                         </div>
-                      )}
+                        <div>
+                          <button
+                            type="button"
+                            disabled={c.isLocked}
+                            onClick={() =>
+                              onRemoveProjectDefinition('character', c.id)
+                            }
+                            style={{ fontSize: '0.8rem' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -195,26 +384,121 @@ export function ProjectView(props: ProjectViewProps) {
                         borderBottom: '1px solid #eee',
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>{s.name}</div>
                       <div
                         style={{
-                          fontSize: '0.8rem',
-                          color: '#777',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '0.75rem',
                         }}
                       >
-                        Imported from Space asset
-                        {s.parentId ? ` #${s.parentId}` : ''}
-                      </div>
-                      {s.description && (
-                        <div
-                          style={{
-                            fontSize: '0.85rem',
-                            color: '#555',
-                          }}
-                        >
-                          {s.description}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setDetailsDefinition(s)}
+                            style={{
+                              fontWeight: 600,
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              margin: 0,
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {s.name}
+                          </button>
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              color: '#777',
+                            }}
+                          >
+                            Status:{' '}
+                            {s.isLocked ? 'Locked' : 'Not locked'}
+                          </div>
                         </div>
-                      )}
+                        <div>
+                          <button
+                            type="button"
+                            disabled={s.isLocked}
+                            onClick={() =>
+                              onRemoveProjectDefinition('scene', s.id)
+                            }
+                            style={{ fontSize: '0.8rem' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <strong>Project styles</strong>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    paddingLeft: 0,
+                    marginTop: '0.5rem',
+                  }}
+                >
+                  {projectStyles.map((style) => (
+                    <li
+                      key={style.id}
+                      style={{
+                        padding: '0.4rem 0',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setDetailsDefinition(style)}
+                            style={{
+                              fontWeight: 600,
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              margin: 0,
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {style.name}
+                          </button>
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              color: '#777',
+                            }}
+                          >
+                            Status:{' '}
+                            {style.isLocked ? 'Locked' : 'Not locked'}
+                          </div>
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            disabled={style.isLocked}
+                            onClick={() =>
+                              onRemoveProjectDefinition('style', style.id)
+                            }
+                            style={{ fontSize: '0.8rem' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -284,7 +568,7 @@ export function ProjectView(props: ProjectViewProps) {
                 style={{ padding: '0.2rem 0.4rem' }}
               >
                 <option value="">None</option>
-                {spaceStyles.map((style) => (
+                {projectStyles.map((style) => (
                   <option key={style.id} value={style.id}>
                     {style.name}
                   </option>
@@ -530,7 +814,64 @@ export function ProjectView(props: ProjectViewProps) {
           )}
         </div>
       </div>
+      {detailsDefinition && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setDetailsDefinition(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              backgroundColor: '#fff',
+              padding: '1rem',
+              borderRadius: '8px',
+              maxWidth: '480px',
+              width: '90%',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 style={{ marginTop: 0, marginBottom: '0.5rem' }}>
+              {detailsDefinition.name}
+            </h4>
+            <div
+              style={{
+                fontSize: '0.9rem',
+                color: '#333',
+                maxHeight: '260px',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {detailsDefinition.description
+                ? detailsDefinition.description
+                : 'No description set for this definition yet.'}
+            </div>
+            <div
+              style={{
+                marginTop: '0.75rem',
+                textAlign: 'right',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDetailsDefinition(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

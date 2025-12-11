@@ -63,9 +63,10 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
     return;
   }
 
-  const { characters, scenes } = req.body as {
+  const { characters, scenes, styles } = req.body as {
     characters?: number[];
     scenes?: number[];
+    styles?: number[];
   };
 
   const characterIds = Array.isArray(characters)
@@ -74,8 +75,15 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
   const sceneIds = Array.isArray(scenes)
     ? scenes.filter((id) => Number.isFinite(Number(id)))
     : [];
+  const styleIds = Array.isArray(styles)
+    ? styles.filter((id) => Number.isFinite(Number(id)))
+    : [];
 
-  if (characterIds.length === 0 && sceneIds.length === 0) {
+  if (
+    characterIds.length === 0 &&
+    sceneIds.length === 0 &&
+    styleIds.length === 0
+  ) {
     res.status(400).json({ error: 'NO_DEFINITIONS_PROVIDED' });
     return;
   }
@@ -101,10 +109,21 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
       importedScenes.push(cloned);
     }
 
+    const importedStyles = [];
+    for (const id of styleIds) {
+      const cloned = await cloneDefinitionToProject(
+        Number(id),
+        project.space_id,
+        project.id,
+      );
+      importedStyles.push(cloned);
+    }
+
     res.status(201).json({
       imported: {
         characters: importedCharacters,
         scenes: importedScenes,
+        styles: importedStyles,
       },
     });
   } catch (error: any) {
@@ -122,4 +141,3 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
 });
 
 export { router as projectImportRouter };
-

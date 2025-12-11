@@ -206,6 +206,7 @@ function App() {
     DefinitionSummary[]
   >([]);
   const [projectScenes, setProjectScenes] = useState<DefinitionSummary[]>([]);
+  const [projectStyles, setProjectStyles] = useState<DefinitionSummary[]>([]);
   const [projectDefinitionsLoading, setProjectDefinitionsLoading] =
     useState(false);
   const [projectDefinitionsError, setProjectDefinitionsError] = useState<
@@ -320,35 +321,48 @@ function App() {
     setProjectDefinitionsLoading(true);
     setProjectDefinitionsError(null);
     try {
-      const [charsRes, scenesRes] = await Promise.all([
+      const [charsRes, scenesRes, stylesRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/definitions/characters`, {
           credentials: 'include',
         }),
         fetch(`/api/projects/${projectId}/definitions/scenes`, {
           credentials: 'include',
         }),
+        fetch(`/api/projects/${projectId}/definitions/styles`, {
+          credentials: 'include',
+        }),
       ]);
 
-      if (charsRes.status === 401 || scenesRes.status === 401) {
+      if (
+        charsRes.status === 401 ||
+        scenesRes.status === 401 ||
+        stylesRes.status === 401
+      ) {
         setUser(null);
         setSpaces([]);
         setProjects([]);
         setSelectedProjectId(null);
         setProjectCharacters([]);
         setProjectScenes([]);
+        setProjectStyles([]);
         return;
       }
 
-      if (charsRes.status === 404 || scenesRes.status === 404) {
+      if (
+        charsRes.status === 404 ||
+        scenesRes.status === 404 ||
+        stylesRes.status === 404
+      ) {
         setProjectCharacters([]);
         setProjectScenes([]);
+        setProjectStyles([]);
         setProjectDefinitionsError(
           'Project not found or not owned by this user.',
         );
         return;
       }
 
-      if (!charsRes.ok || !scenesRes.ok) {
+      if (!charsRes.ok || !scenesRes.ok || !stylesRes.ok) {
         throw new Error('PROJECT_DEFINITIONS_FETCH_FAILED');
       }
 
@@ -358,15 +372,20 @@ function App() {
       const scenesBody = (await scenesRes.json()) as {
         scenes: DefinitionSummary[];
       };
+      const stylesBody = (await stylesRes.json()) as {
+        styles: DefinitionSummary[];
+      };
 
       setProjectCharacters(charsBody.characters ?? []);
       setProjectScenes(scenesBody.scenes ?? []);
+      setProjectStyles(stylesBody.styles ?? []);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load project assets.';
       setProjectDefinitionsError(message);
       setProjectCharacters([]);
       setProjectScenes([]);
+      setProjectStyles([]);
     } finally {
       setProjectDefinitionsLoading(false);
     }
@@ -1150,14 +1169,178 @@ function App() {
         return;
       }
 
-      // For now we do not surface project-level definitions in the UI,
-      // but the import has succeeded at the API level.
+      if (projectIdForImport) {
+        void loadProjectDefinitions(projectIdForImport);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to import definitions.';
       setImportError(message);
     } finally {
       setImportLoading(false);
+    }
+  };
+
+  const handleImportSingleDefinition = (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ): void => {
+    const projectIdForImport =
+      selectedProjectId && isProjectRoute
+        ? selectedProjectId
+        : route.kind === 'project'
+        ? route.projectId
+        : null;
+    if (!user || !selectedSpaceId || !projectIdForImport) return;
+
+    setImportError(null);
+    setImportLoading(true);
+
+    (async () => {
+      try {
+        const payload: {
+          characters?: number[];
+          scenes?: number[];
+          styles?: number[];
+        } = {};
+
+        if (kind === 'character') {
+          payload.characters = [definitionId];
+        } else if (kind === 'scene') {
+          payload.scenes = [definitionId];
+        } else {
+          payload.styles = [definitionId];
+        }
+
+        const res = await fetch(
+          `/api/projects/${projectIdForImport}/import`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+          },
+        );
+
+        const body = (await res.json().catch(() => null)) as
+          | {
+              imported?: {
+                characters?: DefinitionSummary[];
+                scenes?: DefinitionSummary[];
+                styles?: DefinitionSummary[];
+              };
+              error?: string;
+            }
+          | null;
+
+        if (!res.ok) {
+          const code = body?.error;
+          if (code === 'NO_DEFINITIONS_PROVIDED') {
+            setImportError('No definitions were selected for import.');
+          } else if (code === 'UNAUTHENTICATED') {
+            setImportError('You must be logged in to import definitions.');
+            setUser(null);
+            setSpaces([]);
+            setSpaceCharacters([]);
+            setSpaceScenes([]);
+          } else if (code === 'PROJECT_NOT_FOUND') {
+            setImportError('Project not found or not owned by this user.');
+          } else if (code === 'DEFINITION_NOT_FOUND_FOR_SPACE') {
+            setImportError(
+              'The selected definition could not be found for this space.',
+            );
+          } else {
+            setImportError('Failed to import definition into project.');
+          }
+          return;
+        }
+
+        if (!body?.imported) {
+          setImportError('Definition was imported but not returned.');
+          return;
+        }
+
+        void loadProjectDefinitions(projectIdForImport);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to import definition.';
+        setImportError(message);
+      } finally {
+        setImportLoading(false);
+      }
+    })();
+  };
+
+  const handleDeleteProjectDefinition = async (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ): Promise<void> => {
+    const projectIdForDelete =
+      selectedProjectId && isProjectRoute
+        ? selectedProjectId
+        : route.kind === 'project'
+        ? route.projectId
+        : null;
+    if (!user || !projectIdForDelete) return;
+
+    setProjectDefinitionsError(null);
+
+    try {
+      const res = await fetch(
+        `/api/projects/${projectIdForDelete}/definitions/${kind === 'character' ? 'characters' : kind === 'scene' ? 'scenes' : 'styles'}/${definitionId}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        },
+      );
+
+      if (res.status === 204) {
+        if (kind === 'character') {
+          setProjectCharacters((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        } else if (kind === 'scene') {
+          setProjectScenes((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        } else {
+          setProjectStyles((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+          if (selectedStyleId === definitionId) {
+            setSelectedStyleId(null);
+          }
+        }
+        return;
+      }
+
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      const code = body?.error;
+
+      if (code === 'DEFINITION_NOT_FOUND_FOR_PROJECT') {
+        setProjectDefinitionsError('Definition not found for this project.');
+      } else if (code === 'UNAUTHENTICATED') {
+        setProjectDefinitionsError(
+          'You must be logged in to modify project definitions.',
+        );
+        setUser(null);
+        setSpaces([]);
+        setProjectCharacters([]);
+        setProjectScenes([]);
+        setProjectStyles([]);
+      } else if (code === 'INVALID_DEFINITION_ID') {
+        setProjectDefinitionsError('The requested definition id is invalid.');
+      } else {
+        setProjectDefinitionsError('Failed to delete project definition.');
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to delete project definition.';
+      setProjectDefinitionsError(message);
     }
   };
 
@@ -1497,11 +1680,6 @@ function App() {
           {isSpaceContextRoute && (currentSpace?.name ?? 'Space')}
           {isProjectRoute && (currentProject?.name ?? 'Project')}
         </h2>
-        {isProjectRoute && (
-          <p style={{ marginTop: '0.25rem', marginBottom: '0.75rem' }}>
-            new stuff
-          </p>
-        )}
         {!isAuthenticated && (
           <p style={{ color: '#555' }}>
             Log in or register to view and create spaces.
@@ -1586,12 +1764,15 @@ function App() {
                 projectDefinitionsError={projectDefinitionsError}
                 projectCharacters={projectCharacters}
                 projectScenes={projectScenes}
+                projectStyles={projectStyles}
                 selectedCharacterId={selectedCharacterId}
                 setSelectedCharacterId={setSelectedCharacterId}
                 selectedSceneId={selectedSceneId}
                 setSelectedSceneId={setSelectedSceneId}
                 selectedStyleId={selectedStyleId}
                 setSelectedStyleId={setSelectedStyleId}
+                spaceCharacters={spaceCharacters}
+                spaceScenes={spaceScenes}
                 spaceStyles={spaceStyles}
                 tasksLoading={tasksLoading}
                 tasksError={tasksError}
@@ -1612,6 +1793,8 @@ function App() {
                 onImportDefinitionsToProject={handleImportDefinitionsToProject}
                 onCreateTask={handleCreateTask}
                 onRenderTask={handleRenderTask}
+                onImportSingleDefinition={handleImportSingleDefinition}
+                onRemoveProjectDefinition={handleDeleteProjectDefinition}
               />
             )}
           </>
