@@ -9,7 +9,11 @@ import { projectsRouter } from './projects_routes.js';
 import { spaceDefinitionsRouter } from './space_definitions_routes.js';
 import { projectImportRouter } from './project_import_routes.js';
 import { projectDefinitionsRouter } from './project_definitions_routes.js';
-import { projectTasksRouter, taskRenderRouter } from './tasks_routes.js';
+import {
+  projectTasksRouter,
+  taskRenderRouter,
+  renderedAssetsRouter,
+} from './tasks_routes.js';
 
 dotenv.config({ path: new URL('../../.env', import.meta.url).pathname });
 
@@ -42,6 +46,7 @@ app.use('/api/projects/:projectId/import', projectImportRouter);
 app.use('/api/projects/:projectId/definitions', projectDefinitionsRouter);
 app.use('/api/projects/:projectId', projectTasksRouter);
 app.use('/api/tasks/:taskId', taskRenderRouter);
+app.use('/api/rendered-assets', renderedAssetsRouter);
 
 const port = Number(process.env.PORT) || 6000;
 

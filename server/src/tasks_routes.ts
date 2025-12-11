@@ -9,6 +9,8 @@ import {
   createTask,
   listProjectTasks,
   listRenderedAssetsByProject,
+  getRenderedAssetById,
+  updateRenderedAssetState,
   updateTaskStatus,
 } from './tasks_service.js';
 import type { RenderedAssetRecord } from './tasks_service.js';
@@ -76,11 +78,14 @@ const maybeSignAssets = (
 
 const projectsRouter = express.Router({ mergeParams: true });
 const taskRenderRouter = express.Router({ mergeParams: true });
+const renderedAssetsRouter = express.Router({ mergeParams: true });
 
 projectsRouter.use(attachUserFromToken as any);
 projectsRouter.use(requireAuth as any);
 taskRenderRouter.use(attachUserFromToken as any);
 taskRenderRouter.use(requireAuth as any);
+renderedAssetsRouter.use(attachUserFromToken as any);
+renderedAssetsRouter.use(requireAuth as any);
 
 const loadOwnedProjectOr404 = async (
   req: AuthedRequest,
@@ -111,6 +116,46 @@ const loadOwnedProjectOr404 = async (
   const list = rows as ProjectRecord[];
   if (list.length === 0) {
     res.status(404).json({ error: 'PROJECT_NOT_FOUND' });
+    return null;
+  }
+
+  return list[0];
+};
+
+type RenderedAssetWithSpace = RenderedAssetRecord & {
+  space_id: number;
+};
+
+const loadOwnedRenderedAssetOr404 = async (
+  req: AuthedRequest,
+  res: Response,
+): Promise<RenderedAssetWithSpace | null> => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: 'UNAUTHENTICATED' });
+    return null;
+  }
+
+  const { assetId } = req.params as { assetId?: string };
+  const numericAssetId = assetId ? Number(assetId) : NaN;
+  if (!Number.isFinite(numericAssetId) || numericAssetId <= 0) {
+    res.status(400).json({ error: 'INVALID_RENDERED_ASSET_ID' });
+    return null;
+  }
+
+  const db = getDbPool();
+  const [rows] = await db.query(
+    `SELECT ra.*, p.space_id
+     FROM rendered_assets ra
+     JOIN projects p ON p.id = ra.project_id
+     JOIN spaces s ON s.id = p.space_id
+     WHERE ra.id = ? AND s.user_id = ?
+     LIMIT 1`,
+    [numericAssetId, user.id],
+  );
+  const list = rows as RenderedAssetWithSpace[];
+  if (list.length === 0) {
+    res.status(404).json({ error: 'RENDERED_ASSET_NOT_FOUND' });
     return null;
   }
 
@@ -241,12 +286,49 @@ projectsRouter.get(
 
     try {
       const assets = await listRenderedAssetsByProject(project.id);
-      const signed = maybeSignAssets(assets);
+      const visible = assets.filter((asset) => asset.state !== 'archived');
+      const signed = maybeSignAssets(visible);
       res.status(200).json({ assets: signed });
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('[tasks] List rendered assets error:', error);
       res.status(500).json({ error: 'RENDERED_ASSET_LIST_FAILED' });
+    }
+  },
+);
+
+// Rendered asset state updates (draft/approved/archived)
+
+renderedAssetsRouter.patch(
+  '/:assetId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const asset = await loadOwnedRenderedAssetOr404(req, res);
+    if (!asset) {
+      return;
+    }
+
+    const { state } = req.body as {
+      state?: 'draft' | 'approved' | 'archived' | string;
+    };
+
+    if (state !== 'draft' && state !== 'approved' && state !== 'archived') {
+      res.status(400).json({ error: 'INVALID_RENDERED_ASSET_STATE' });
+      return;
+    }
+
+    try {
+      await updateRenderedAssetState(asset.id, state);
+      const updated = await getRenderedAssetById(asset.id);
+      if (!updated) {
+        res.status(404).json({ error: 'RENDERED_ASSET_NOT_FOUND' });
+        return;
+      }
+      const signed = maybeSignAssetUrl(updated);
+      res.status(200).json({ asset: signed });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[tasks] Update rendered asset state error:', error);
+      res.status(500).json({ error: 'RENDERED_ASSET_UPDATE_FAILED' });
     }
   },
 );
@@ -485,4 +567,8 @@ taskRenderRouter.post(
   },
 );
 
-export { projectsRouter as projectTasksRouter, taskRenderRouter };
+export {
+  projectsRouter as projectTasksRouter,
+  taskRenderRouter,
+  renderedAssetsRouter,
+};

@@ -77,6 +77,32 @@ export const listRenderedAssetsByProject = async (
   return rows as RenderedAssetRecord[];
 };
 
+export const getRenderedAssetById = async (
+  assetId: number,
+): Promise<RenderedAssetRecord | null> => {
+  const db = getDbPool();
+  const [rows] = await db.query(
+    'SELECT * FROM rendered_assets WHERE id = ? LIMIT 1',
+    [assetId],
+  );
+  const list = rows as RenderedAssetRecord[];
+  if (list.length === 0) {
+    return null;
+  }
+  return list[0];
+};
+
+export const updateRenderedAssetState = async (
+  assetId: number,
+  state: 'draft' | 'approved' | 'archived',
+): Promise<void> => {
+  const db = getDbPool();
+  await db.query('UPDATE rendered_assets SET state = ? WHERE id = ?', [
+    state,
+    assetId,
+  ]);
+};
+
 
 export const updateTaskStatus = async (
   taskId: number,

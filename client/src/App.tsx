@@ -1476,6 +1476,63 @@ function App() {
     }
   };
 
+  const handleUpdateRenderedAssetState = async (
+    assetId: number,
+    state: 'draft' | 'approved' | 'archived',
+  ): Promise<void> => {
+    if (!user) return;
+
+    setAssetsError(null);
+
+    try {
+      const res = await fetch(`/api/rendered-assets/${assetId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ state }),
+      });
+
+      const body = (await res.json().catch(() => null)) as
+        | { asset?: RenderedAssetSummary; error?: string }
+        | null;
+
+      if (!res.ok) {
+        const code = body?.error;
+        if (code === 'UNAUTHENTICATED') {
+          setAssetsError('You must be logged in to update rendered assets.');
+          setUser(null);
+          setSpaces([]);
+          setProjects([]);
+          setTasks([]);
+          setRenderedAssets([]);
+        } else if (code === 'RENDERED_ASSET_NOT_FOUND') {
+          setAssetsError('Rendered asset not found or not owned by this user.');
+        } else if (code === 'INVALID_RENDERED_ASSET_STATE') {
+          setAssetsError('Invalid rendered asset state.');
+        } else {
+          setAssetsError('Failed to update rendered asset.');
+        }
+        return;
+      }
+
+      if (!body?.asset) {
+        return;
+      }
+
+      if (state === 'archived') {
+        setRenderedAssets((prev) => prev.filter((a) => a.id !== assetId));
+      } else {
+        setRenderedAssets((prev) =>
+          prev.map((a) => (a.id === body.asset!.id ? body.asset! : a)),
+        );
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to update rendered asset.';
+      setAssetsError(message);
+    }
+  };
+
   return (
     <main
       style={{
@@ -1780,6 +1837,7 @@ function App() {
                 onRenderTask={handleRenderTask}
                 onImportSingleDefinition={handleImportSingleDefinition}
                 onRemoveProjectDefinition={handleDeleteProjectDefinition}
+                onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
               />
             )}
           </>

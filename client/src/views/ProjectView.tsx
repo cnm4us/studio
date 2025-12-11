@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DefinitionSummary } from '../App';
 
 type ProjectViewProps = {
@@ -27,6 +27,10 @@ type ProjectViewProps = {
   assetsLoading: boolean;
   assetsError: string | null;
   renderedAssets: any[];
+  onUpdateRenderedAssetState: (
+    assetId: number,
+    state: 'draft' | 'approved' | 'archived',
+  ) => void;
   onImportDefinitionsToProject: (event: FormEvent) => void;
   onCreateTask: (event: FormEvent) => void;
   onRenderTask: (params: {
@@ -77,6 +81,7 @@ export function ProjectView(props: ProjectViewProps) {
     onRenderTask,
     onImportSingleDefinition,
     onRemoveProjectDefinition,
+    onUpdateRenderedAssetState,
   } = props;
 
   const [selectedSpaceCharacterId, setSelectedSpaceCharacterId] = useState<
@@ -90,6 +95,9 @@ export function ProjectView(props: ProjectViewProps) {
   >('');
   const [detailsDefinition, setDetailsDefinition] =
     useState<DefinitionSummary | null>(null);
+  const [selectedRenderedAsset, setSelectedRenderedAsset] = useState<any | null>(
+    null,
+  );
   const [castByTaskId, setCastByTaskId] = useState<
     Record<
       number,
@@ -127,6 +135,22 @@ export function ProjectView(props: ProjectViewProps) {
   const availableSpaceStyles = spaceStyles.filter(
     (style) => !importedStyleParentIds.has(style.id),
   );
+
+  useEffect(() => {
+    if (!selectedRenderedAsset) {
+      return;
+    }
+    const latest = renderedAssets.find(
+      (asset) => asset.id === selectedRenderedAsset.id,
+    );
+    if (!latest) {
+      setSelectedRenderedAsset(null);
+      return;
+    }
+    if (latest !== selectedRenderedAsset) {
+      setSelectedRenderedAsset(latest);
+    }
+  }, [renderedAssets, selectedRenderedAsset]);
 
   const getCastForTask = (taskId: number) =>
     castByTaskId[taskId] ?? {
@@ -1009,18 +1033,26 @@ export function ProjectView(props: ProjectViewProps) {
                               <div
                                 key={asset.id}
                                 style={{
-                                  border: '1px solid #eee',
+                                  border: '1px solid #555',
                                   borderRadius: '4px',
                                   padding: '0.35rem',
                                   backgroundColor: '#fff',
                                 }}
                               >
-                                {asset.type === 'image' ? (
-                                  <a
-                                    href={asset.file_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedRenderedAsset(asset)}
+                                  style={{
+                                    border: 'none',
+                                    padding: 0,
+                                    margin: 0,
+                                    background: 'none',
+                                    cursor: 'pointer',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  {asset.type === 'image' ? (
                                     <img
                                       src={asset.file_url}
                                       alt=""
@@ -1030,19 +1062,17 @@ export function ProjectView(props: ProjectViewProps) {
                                         display: 'block',
                                       }}
                                     />
-                                  </a>
-                                ) : (
-                                  <a
-                                    href={asset.file_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      fontSize: '0.8rem',
-                                    }}
-                                  >
-                                    {asset.file_key}
-                                  </a>
-                                )}
+                                  ) : (
+                                    <span
+                                      style={{
+                                        fontSize: '0.8rem',
+                                        textDecoration: 'underline',
+                                      }}
+                                    >
+                                      {asset.file_key}
+                                    </span>
+                                  )}
+                                </button>
                                 <div
                                   style={{
                                     fontSize: '0.75rem',
@@ -1152,13 +1182,25 @@ export function ProjectView(props: ProjectViewProps) {
                 <div
                   key={asset.id}
                   style={{
-                    border: '1px solid #eee',
+                    border: '1px solid #555',
                     borderRadius: '4px',
                     padding: '0.5rem',
                   }}
                 >
-                  {asset.type === 'image' ? (
-                    <a href={asset.file_url} target="_blank" rel="noreferrer">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRenderedAsset(asset)}
+                    style={{
+                      border: 'none',
+                      padding: 0,
+                      margin: 0,
+                      background: 'none',
+                      cursor: 'pointer',
+                      width: '100%',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {asset.type === 'image' ? (
                       <img
                         src={asset.file_url}
                         alt=""
@@ -1168,12 +1210,16 @@ export function ProjectView(props: ProjectViewProps) {
                           display: 'block',
                         }}
                       />
-                    </a>
-                  ) : (
-                    <a href={asset.file_url} target="_blank" rel="noreferrer">
-                      {asset.file_key}
-                    </a>
-                  )}
+                    ) : (
+                      <span
+                        style={{
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        {asset.file_key}
+                      </span>
+                    )}
+                  </button>
                   <div
                     style={{
                       fontSize: '0.8rem',
@@ -1243,6 +1289,167 @@ export function ProjectView(props: ProjectViewProps) {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedRenderedAsset && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+          }}
+          onClick={() => setSelectedRenderedAsset(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              backgroundColor: '#fff',
+              padding: '0.75rem 0.75rem 0.9rem',
+              borderRadius: '8px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedRenderedAsset(null)}
+              aria-label="Close"
+              style={{
+                position: 'absolute',
+                top: '0.4rem',
+                right: '0.4rem',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontSize: '1.1rem',
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                paddingTop: '0.4rem',
+              }}
+            >
+              {selectedRenderedAsset.type === 'image' ? (
+                <img
+                  src={selectedRenderedAsset.file_url}
+                  alt=""
+                  style={{
+                    maxWidth: '100%',
+                    height: 'auto',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <a
+                  href={selectedRenderedAsset.file_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {selectedRenderedAsset.file_key}
+                </a>
+              )}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '0.5rem',
+                gap: '0.75rem',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '0.85rem',
+                  color: '#555',
+                }}
+              >
+                State: {selectedRenderedAsset.state}
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.4rem',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateRenderedAssetState(
+                      selectedRenderedAsset.id,
+                      'draft',
+                    )
+                  }
+                  style={{
+                    padding: '0.3rem 0.7rem',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#757575',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateRenderedAssetState(
+                      selectedRenderedAsset.id,
+                      'approved',
+                    )
+                  }
+                  style={{
+                    padding: '0.3rem 0.7rem',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#2e7d32',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateRenderedAssetState(
+                      selectedRenderedAsset.id,
+                      'archived',
+                    )
+                  }
+                  style={{
+                    padding: '0.3rem 0.7rem',
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#c62828',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
