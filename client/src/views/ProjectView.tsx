@@ -389,7 +389,15 @@ export function ProjectView(props: ProjectViewProps) {
                             onClick={() =>
                               onRemoveProjectDefinition('character', c.id)
                             }
-                            style={{ fontSize: '0.8rem' }}
+                            style={{
+                              fontSize: '0.8rem',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '4px',
+                              border: 'none',
+                              backgroundColor: '#555',
+                              color: '#fff',
+                              cursor: c.isLocked ? 'default' : 'pointer',
+                            }}
                           >
                             Remove
                           </button>
@@ -457,7 +465,15 @@ export function ProjectView(props: ProjectViewProps) {
                             onClick={() =>
                               onRemoveProjectDefinition('scene', s.id)
                             }
-                            style={{ fontSize: '0.8rem' }}
+                            style={{
+                              fontSize: '0.8rem',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '4px',
+                              border: 'none',
+                              backgroundColor: '#555',
+                              color: '#fff',
+                              cursor: s.isLocked ? 'default' : 'pointer',
+                            }}
                           >
                             Remove
                           </button>
@@ -525,7 +541,15 @@ export function ProjectView(props: ProjectViewProps) {
                             onClick={() =>
                               onRemoveProjectDefinition('style', style.id)
                             }
-                            style={{ fontSize: '0.8rem' }}
+                            style={{
+                              fontSize: '0.8rem',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '4px',
+                              border: 'none',
+                              backgroundColor: '#555',
+                              color: '#fff',
+                              cursor: style.isLocked ? 'default' : 'pointer',
+                            }}
                           >
                             Remove
                           </button>
@@ -598,7 +622,18 @@ export function ProjectView(props: ProjectViewProps) {
             </p>
           )}
           <div>
-            <button type="submit" disabled={createTaskLoading}>
+            <button
+              type="submit"
+              disabled={createTaskLoading}
+              style={{
+                padding: '0.4rem 0.9rem',
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: '#2e7d32',
+                color: '#fff',
+                cursor: createTaskLoading ? 'default' : 'pointer',
+              }}
+            >
               {createTaskLoading ? 'Creating…' : 'Create task'}
             </button>
           </div>
@@ -682,6 +717,18 @@ export function ProjectView(props: ProjectViewProps) {
                             renderingTaskId === task.id ||
                             task.status === 'running'
                           }
+                          style={{
+                            padding: '0.35rem 0.9rem',
+                            borderRadius: '4px',
+                            border: 'none',
+                            backgroundColor: '#1565c0',
+                            color: '#fff',
+                            cursor:
+                              renderingTaskId === task.id ||
+                              task.status === 'running'
+                                ? 'default'
+                                : 'pointer',
+                          }}
                         >
                           {renderingTaskId === task.id
                             ? 'Rendering…'
