@@ -1,29 +1,32 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import './App.css';
+import { DashboardView } from './views/DashboardView';
+import { ProjectView } from './views/ProjectView';
+import { SpaceView } from './views/SpaceView';
 
 type PublicUser = {
   id: number;
   email: string;
 };
 
-type SpaceSummary = {
+export type SpaceSummary = {
   id: number;
   name: string;
   description?: string | null;
   createdAt?: string;
 };
 
-type ProjectSummary = {
+export type ProjectSummary = {
   id: number;
   name: string;
   description?: string | null;
   createdAt?: string;
 };
 
-type DefinitionSummary = {
+export type DefinitionSummary = {
   id: number;
-  type: 'character' | 'scene';
+  type: 'character' | 'scene' | 'style';
   scope: 'space' | 'project';
   name: string;
   description?: string | null;
@@ -31,6 +34,8 @@ type DefinitionSummary = {
   rootId?: number | null;
   parentId?: number | null;
   createdAt?: string;
+   isCanonical?: boolean;
+   isLocked?: boolean;
 };
 
 type TaskSummary = {
@@ -52,6 +57,64 @@ type RenderedAssetSummary = {
 };
 
 type AuthMode = 'login' | 'register';
+
+type Route =
+  | { kind: 'dashboard' }
+  | { kind: 'space'; spaceId: number }
+  | { kind: 'project'; projectId: number }
+  | { kind: 'spaceNewCharacter'; spaceId: number }
+  | { kind: 'spaceNewScene'; spaceId: number }
+  | { kind: 'spaceNewStyle'; spaceId: number };
+
+const parseHashRoute = (): Route => {
+  const hash = window.location.hash.replace(/^#/, '');
+  const parts = hash.split('/').filter(Boolean);
+
+  if (parts.length === 0) {
+    return { kind: 'dashboard' };
+  }
+
+  if (parts[0] === 'spaces' && parts[1]) {
+    const id = Number(parts[1]);
+    if (Number.isFinite(id) && id > 0) {
+      if (parts[2] === 'characters' && parts[3] === 'new') {
+        return { kind: 'spaceNewCharacter', spaceId: id };
+      }
+      if (parts[2] === 'scenes' && parts[3] === 'new') {
+        return { kind: 'spaceNewScene', spaceId: id };
+      }
+      if (parts[2] === 'styles' && parts[3] === 'new') {
+        return { kind: 'spaceNewStyle', spaceId: id };
+      }
+      return { kind: 'space', spaceId: id };
+    }
+  }
+
+  if (parts[0] === 'projects' && parts[1]) {
+    const id = Number(parts[1]);
+    if (Number.isFinite(id) && id > 0) {
+      return { kind: 'project', projectId: id };
+    }
+  }
+
+  return { kind: 'dashboard' };
+};
+
+const navigateTo = (route: Route): void => {
+  if (route.kind === 'dashboard') {
+    window.location.hash = '#/dashboard';
+  } else if (route.kind === 'space') {
+    window.location.hash = `#/spaces/${route.spaceId}`;
+  } else if (route.kind === 'project') {
+    window.location.hash = `#/projects/${route.projectId}`;
+  } else if (route.kind === 'spaceNewCharacter') {
+    window.location.hash = `#/spaces/${route.spaceId}/characters/new`;
+  } else if (route.kind === 'spaceNewScene') {
+    window.location.hash = `#/spaces/${route.spaceId}/scenes/new`;
+  } else if (route.kind === 'spaceNewStyle') {
+    window.location.hash = `#/spaces/${route.spaceId}/styles/new`;
+  }
+};
 
 function App() {
   const [user, setUser] = useState<PublicUser | null>(null);
@@ -110,11 +173,62 @@ function App() {
   const [newCharacterName, setNewCharacterName] = useState('');
   const [newCharacterDescription, setNewCharacterDescription] =
     useState('');
+  const [characterAgeRange, setCharacterAgeRange] = useState('');
+  const [characterGenderIdentity, setCharacterGenderIdentity] = useState('');
+  const [characterPronouns, setCharacterPronouns] = useState('');
+  const [characterSpecies, setCharacterSpecies] = useState('');
+  const [characterPersonality, setCharacterPersonality] = useState('');
+  const [characterArchetype, setCharacterArchetype] = useState('');
   const [newSceneName, setNewSceneName] = useState('');
   const [newSceneDescription, setNewSceneDescription] = useState('');
   const [createDefinitionLoading, setCreateDefinitionLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [deleteDefinitionLoadingId, setDeleteDefinitionLoadingId] = useState<
+    number | null
+  >(null);
+  const [deleteDefinitionError, setDeleteDefinitionError] = useState<
+    string | null
+  >(null);
+  const [spaceStyles, setSpaceStyles] = useState<DefinitionSummary[]>([]);
+  const [newStyleName, setNewStyleName] = useState('');
+  const [newStyleDescription, setNewStyleDescription] = useState('');
+  const [selectedStyleId, setSelectedStyleId] = useState<number | null>(null);
+  const [newStyleRenderDomain, setNewStyleRenderDomain] = useState('');
+  const [newStyleGenres, setNewStyleGenres] = useState('');
+
+  const [selectedCharacterId, setSelectedCharacterId] = useState<
+    number | null
+  >(null);
+  const [selectedSceneId, setSelectedSceneId] = useState<number | null>(null);
+
+  const [projectCharacters, setProjectCharacters] = useState<
+    DefinitionSummary[]
+  >([]);
+  const [projectScenes, setProjectScenes] = useState<DefinitionSummary[]>([]);
+  const [projectDefinitionsLoading, setProjectDefinitionsLoading] =
+    useState(false);
+  const [projectDefinitionsError, setProjectDefinitionsError] = useState<
+    string | null
+  >(null);
+
+  const [route, setRoute] = useState<Route>(() => parseHashRoute());
+
+  useEffect(() => {
+    if (!window.location.hash) {
+      window.location.hash = '#/dashboard';
+    }
+
+    const handleHashChange = (): void => {
+      setRoute(parseHashRoute());
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
 
   const loadCurrentUser = async (): Promise<void> => {
     setAuthError(null);
@@ -189,6 +303,7 @@ function App() {
         setSelectedProjectId(firstProject.id);
         void loadProjectTasks(firstProject.id);
         void loadRenderedAssets(firstProject.id);
+        void loadProjectDefinitions(firstProject.id);
       }
     } catch (err) {
       const message =
@@ -196,6 +311,64 @@ function App() {
       setProjectsError(message);
     } finally {
       setProjectsLoading(false);
+    }
+  };
+
+  const loadProjectDefinitions = async (
+    projectId: number,
+  ): Promise<void> => {
+    setProjectDefinitionsLoading(true);
+    setProjectDefinitionsError(null);
+    try {
+      const [charsRes, scenesRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}/definitions/characters`, {
+          credentials: 'include',
+        }),
+        fetch(`/api/projects/${projectId}/definitions/scenes`, {
+          credentials: 'include',
+        }),
+      ]);
+
+      if (charsRes.status === 401 || scenesRes.status === 401) {
+        setUser(null);
+        setSpaces([]);
+        setProjects([]);
+        setSelectedProjectId(null);
+        setProjectCharacters([]);
+        setProjectScenes([]);
+        return;
+      }
+
+      if (charsRes.status === 404 || scenesRes.status === 404) {
+        setProjectCharacters([]);
+        setProjectScenes([]);
+        setProjectDefinitionsError(
+          'Project not found or not owned by this user.',
+        );
+        return;
+      }
+
+      if (!charsRes.ok || !scenesRes.ok) {
+        throw new Error('PROJECT_DEFINITIONS_FETCH_FAILED');
+      }
+
+      const charsBody = (await charsRes.json()) as {
+        characters: DefinitionSummary[];
+      };
+      const scenesBody = (await scenesRes.json()) as {
+        scenes: DefinitionSummary[];
+      };
+
+      setProjectCharacters(charsBody.characters ?? []);
+      setProjectScenes(scenesBody.scenes ?? []);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load project assets.';
+      setProjectDefinitionsError(message);
+      setProjectCharacters([]);
+      setProjectScenes([]);
+    } finally {
+      setProjectDefinitionsLoading(false);
     }
   };
 
@@ -275,31 +448,44 @@ function App() {
     setDefinitionsLoading(true);
     setDefinitionsError(null);
     try {
-      const [charsRes, scenesRes] = await Promise.all([
+      const [charsRes, scenesRes, stylesRes] = await Promise.all([
         fetch(`/api/spaces/${spaceId}/characters`, {
           credentials: 'include',
         }),
         fetch(`/api/spaces/${spaceId}/scenes`, {
           credentials: 'include',
         }),
+        fetch(`/api/spaces/${spaceId}/styles`, {
+          credentials: 'include',
+        }),
       ]);
 
-      if (charsRes.status === 401 || scenesRes.status === 401) {
+      if (
+        charsRes.status === 401 ||
+        scenesRes.status === 401 ||
+        stylesRes.status === 401
+      ) {
         setUser(null);
         setSpaces([]);
         setSpaceCharacters([]);
         setSpaceScenes([]);
+        setSpaceStyles([]);
         return;
       }
 
-      if (charsRes.status === 404 || scenesRes.status === 404) {
+      if (
+        charsRes.status === 404 ||
+        scenesRes.status === 404 ||
+        stylesRes.status === 404
+      ) {
         setSpaceCharacters([]);
         setSpaceScenes([]);
+        setSpaceStyles([]);
         setDefinitionsError('Space not found or not owned by this user.');
         return;
       }
 
-      if (!charsRes.ok || !scenesRes.ok) {
+      if (!charsRes.ok || !scenesRes.ok || !stylesRes.ok) {
         throw new Error('DEFINITIONS_FETCH_FAILED');
       }
 
@@ -309,15 +495,20 @@ function App() {
       const scenesBody = (await scenesRes.json()) as {
         scenes: DefinitionSummary[];
       };
+      const stylesBody = (await stylesRes.json()) as {
+        styles: DefinitionSummary[];
+      };
 
       setSpaceCharacters(charsBody.characters ?? []);
       setSpaceScenes(scenesBody.scenes ?? []);
+      setSpaceStyles(stylesBody.styles ?? []);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load definitions.';
       setDefinitionsError(message);
       setSpaceCharacters([]);
       setSpaceScenes([]);
+      setSpaceStyles([]);
     } finally {
       setDefinitionsLoading(false);
     }
@@ -341,6 +532,12 @@ function App() {
       setRenderedAssets([]);
       setSpaceCharacters([]);
       setSpaceScenes([]);
+      setProjectCharacters([]);
+      setProjectScenes([]);
+      setSpaceStyles([]);
+      setSelectedStyleId(null);
+      setSelectedCharacterId(null);
+      setSelectedSceneId(null);
     }
   }, [user]);
 
@@ -350,13 +547,141 @@ function App() {
     if (!isAuthenticated) {
       return;
     }
-    if (!selectedSpaceId && spaces.length > 0) {
-      const first = spaces[0];
-      setSelectedSpaceId(first.id);
-      void loadProjects(first.id);
-      void loadDefinitions(first.id);
+    if (spaces.length === 0) {
+      return;
     }
-  }, [isAuthenticated, selectedSpaceId, spaces]);
+
+    let desiredSpaceId: number | null = null;
+
+    if (
+      route.kind === 'space' ||
+      route.kind === 'spaceNewCharacter' ||
+      route.kind === 'spaceNewScene' ||
+      route.kind === 'spaceNewStyle'
+    ) {
+      desiredSpaceId = route.spaceId;
+    } else if (selectedSpaceId) {
+      desiredSpaceId = selectedSpaceId;
+    } else {
+      desiredSpaceId = spaces[0]?.id ?? null;
+    }
+
+    if (desiredSpaceId && desiredSpaceId !== selectedSpaceId) {
+      setSelectedSpaceId(desiredSpaceId);
+      void loadProjects(desiredSpaceId);
+      void loadDefinitions(desiredSpaceId);
+    }
+  }, [isAuthenticated, selectedSpaceId, spaces, route]);
+
+  const isDashboardRoute = route.kind === 'dashboard';
+  const isSpaceOverviewRoute = route.kind === 'space';
+  const isSpaceContextRoute =
+    route.kind === 'space' ||
+    route.kind === 'spaceNewCharacter' ||
+    route.kind === 'spaceNewScene' ||
+    route.kind === 'spaceNewStyle';
+  const isProjectRoute = route.kind === 'project';
+
+  const currentSpace =
+    selectedSpaceId != null
+      ? spaces.find((space) => space.id === selectedSpaceId)
+      : undefined;
+
+  const currentProject =
+    selectedProjectId != null
+      ? projects.find((project) => project.id === selectedProjectId)
+      : undefined;
+
+  const isCreateCharacterRoute = route.kind === 'spaceNewCharacter';
+  const isCreateSceneRoute = route.kind === 'spaceNewScene';
+  const isCreateStyleRoute = route.kind === 'spaceNewStyle';
+
+  // Debug: log route and selection to help diagnose project/task view issues.
+  // eslint-disable-next-line no-console
+  console.log(
+    '[ui] route',
+    route,
+    'selectedSpaceId',
+    selectedSpaceId,
+    'selectedProjectId',
+    selectedProjectId,
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+    if (route.kind !== 'project') {
+      return;
+    }
+
+    const targetProjectId = route.projectId;
+
+    if (selectedProjectId === targetProjectId && selectedSpaceId) {
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${targetProjectId}`, {
+          credentials: 'include',
+        });
+
+        if (res.status === 401) {
+          setUser(null);
+          setSpaces([]);
+          setProjects([]);
+          setTasks([]);
+          setRenderedAssets([]);
+          return;
+        }
+
+        if (res.status === 404) {
+          setProjectsError('Project not found or not owned by this user.');
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error('PROJECT_FETCH_FAILED');
+        }
+
+        const body = (await res.json()) as {
+          project: {
+            id: number;
+            spaceId: number;
+            name?: string;
+            description?: string | null;
+          };
+        };
+
+        const project = body.project;
+        if (!project || !project.spaceId || !project.id) {
+          setProjectsError('Project load response was invalid.');
+          return;
+        }
+
+        setSelectedSpaceId(project.spaceId);
+        setSelectedProjectId(project.id);
+
+        void loadProjects(project.spaceId);
+        void loadDefinitions(project.spaceId);
+        void loadProjectTasks(project.id);
+        void loadRenderedAssets(project.id);
+        void loadProjectDefinitions(project.id);
+      } catch (error: any) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to load project.';
+        setProjectsError(message);
+      }
+    })();
+  }, [
+    isAuthenticated,
+    route,
+    selectedProjectId,
+    selectedSpaceId,
+    setUser,
+    setSpaces,
+  ]);
 
   const handleAuthSubmit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -504,6 +829,12 @@ function App() {
     setRenderedAssets([]);
     setSpaceCharacters([]);
     setSpaceScenes([]);
+    setProjectCharacters([]);
+    setProjectScenes([]);
+    setSpaceStyles([]);
+    setSelectedStyleId(null);
+    setSelectedCharacterId(null);
+    setSelectedSceneId(null);
     void loadProjects(spaceId);
     void loadDefinitions(spaceId);
   };
@@ -567,9 +898,12 @@ function App() {
   };
 
   const handleSelectProject = (projectId: number): void => {
+    // eslint-disable-next-line no-console
+    console.log('[ui] handleSelectProject', { projectId });
     setSelectedProjectId(projectId);
     void loadProjectTasks(projectId);
     void loadRenderedAssets(projectId);
+    void loadProjectDefinitions(projectId);
   };
 
   const handleCreateDefinition = async (
@@ -587,6 +921,26 @@ function App() {
       ? newCharacterDescription
       : newSceneDescription;
 
+    const metadata = isCharacter
+      ? {
+          core_identity: {
+            name,
+            age_range: characterAgeRange || undefined,
+            gender_identity: characterGenderIdentity || undefined,
+            pronouns: characterPronouns || undefined,
+            species: characterSpecies || undefined,
+            personality_keywords:
+              characterPersonality.trim().length > 0
+                ? characterPersonality
+                    .split(',')
+                    .map((token) => token.trim())
+                    .filter(Boolean)
+                : undefined,
+            archetype: characterArchetype || undefined,
+          },
+        }
+      : undefined;
+
     try {
       const res = await fetch(
         `/api/spaces/${selectedSpaceId}/${isCharacter ? 'characters' : 'scenes'}`,
@@ -597,6 +951,7 @@ function App() {
           body: JSON.stringify({
             name,
             description: description || null,
+            metadata: metadata ?? null,
           }),
         },
       );
@@ -627,6 +982,12 @@ function App() {
         setSpaceCharacters((prev) => [body.character as DefinitionSummary, ...prev]);
         setNewCharacterName('');
         setNewCharacterDescription('');
+        setCharacterAgeRange('');
+        setCharacterGenderIdentity('');
+        setCharacterPronouns('');
+        setCharacterSpecies('');
+        setCharacterPersonality('');
+        setCharacterArchetype('');
       } else if (!isCharacter && body?.scene) {
         setSpaceScenes((prev) => [body.scene as DefinitionSummary, ...prev]);
         setNewSceneName('');
@@ -634,6 +995,14 @@ function App() {
       } else {
         // eslint-disable-next-line no-console
         console.error('Definition was created but not returned.');
+        return;
+      }
+
+      if (
+        selectedSpaceId &&
+        (route.kind === 'spaceNewCharacter' || route.kind === 'spaceNewScene')
+      ) {
+        navigateTo({ kind: 'space', spaceId: selectedSpaceId });
       }
     } catch (err) {
       const message =
@@ -645,11 +1014,81 @@ function App() {
     }
   };
 
+  const handleDeleteSpaceDefinition = async (
+    kind: 'character' | 'scene',
+    definitionId: number,
+  ): Promise<void> => {
+    if (!user || !selectedSpaceId) return;
+
+    setDeleteDefinitionError(null);
+    setDeleteDefinitionLoadingId(definitionId);
+
+    try {
+      const res = await fetch(
+        `/api/spaces/${selectedSpaceId}/${kind === 'character' ? 'characters' : 'scenes'}/${definitionId}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        },
+      );
+
+      if (res.status === 204) {
+        if (kind === 'character') {
+          setSpaceCharacters((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        } else {
+          setSpaceScenes((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        }
+        return;
+      }
+
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      const code = body?.error;
+
+      if (code === 'DEFINITION_LOCKED') {
+        setDeleteDefinitionError(
+          'This definition is locked because it has been imported into a project.',
+        );
+      } else if (code === 'DEFINITION_NOT_FOUND') {
+        setDeleteDefinitionError('Definition not found.');
+      } else if (code === 'UNAUTHENTICATED') {
+        setDeleteDefinitionError(
+          'You must be logged in to delete definitions.',
+        );
+        setUser(null);
+        setSpaces([]);
+        setSpaceCharacters([]);
+        setSpaceScenes([]);
+      } else if (code === 'INVALID_DEFINITION_ID') {
+        setDeleteDefinitionError('The requested definition id is invalid.');
+      } else {
+        setDeleteDefinitionError('Failed to delete definition.');
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to delete definition.';
+      setDeleteDefinitionError(message);
+    } finally {
+      setDeleteDefinitionLoadingId(null);
+    }
+  };
+
   const handleImportDefinitionsToProject = async (
     event: FormEvent,
   ): Promise<void> => {
     event.preventDefault();
-    if (!user || !selectedSpaceId || !selectedProjectId) return;
+    const projectIdForImport =
+      selectedProjectId && isProjectRoute
+        ? selectedProjectId
+        : route.kind === 'project'
+        ? route.projectId
+        : null;
+    if (!user || !selectedSpaceId || !projectIdForImport) return;
 
     setImportError(null);
     setImportLoading(true);
@@ -664,18 +1103,15 @@ function App() {
         return;
       }
 
-      const res = await fetch(
-        `/api/projects/${selectedProjectId}/import`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            characters: characterIds,
-            scenes: sceneIds,
-          }),
-        },
-      );
+      const res = await fetch(`/api/projects/${projectIdForImport}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          characters: characterIds,
+          scenes: sceneIds,
+        }),
+      });
 
       const body = (await res.json().catch(() => null)) as
         | {
@@ -727,13 +1163,19 @@ function App() {
 
   const handleCreateTask = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    if (!user || !selectedProjectId) return;
+    const projectIdForTask =
+      selectedProjectId && isProjectRoute
+        ? selectedProjectId
+        : route.kind === 'project'
+        ? route.projectId
+        : null;
+    if (!user || !projectIdForTask) return;
 
     setCreateTaskError(null);
     setCreateTaskLoading(true);
 
     try {
-      const res = await fetch(`/api/projects/${selectedProjectId}/tasks`, {
+      const res = await fetch(`/api/projects/${projectIdForTask}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -796,7 +1238,11 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          styleDefinitionId: selectedStyleId ?? null,
+          characterDefinitionId: selectedCharacterId ?? null,
+          sceneDefinitionId: selectedSceneId ?? null,
+        }),
       });
 
       const body = (await res.json().catch(() => null)) as
@@ -870,15 +1316,77 @@ function App() {
             Minimal auth & spaces skeleton.
           </p>
         </div>
+        <nav
+          style={{
+            display: 'flex',
+            gap: '0.5rem',
+            alignItems: 'center',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigateTo({ kind: 'dashboard' })}
+            style={{
+              padding: '0.3rem 0.6rem',
+              borderRadius: '4px',
+              border: '1px solid #222',
+              backgroundColor:
+                isDashboardRoute ? '#222' : 'transparent',
+              color: isDashboardRoute ? '#fff' : '#222',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+            }}
+          >
+            Dashboard
+          </button>
+          {selectedSpaceId && (
+          <button
+            type="button"
+            onClick={() =>
+              navigateTo({ kind: 'space', spaceId: selectedSpaceId })
+            }
+              style={{
+                padding: '0.3rem 0.6rem',
+                borderRadius: '4px',
+                border: '1px solid #222',
+                backgroundColor:
+                  isSpaceContextRoute ? '#222' : 'transparent',
+                color: isSpaceContextRoute ? '#fff' : '#222',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+              }}
+            >
+              Current space
+            </button>
+          )}
+          {selectedProjectId && (
+            <button
+              type="button"
+              onClick={() =>
+                navigateTo({ kind: 'project', projectId: selectedProjectId })
+              }
+              style={{
+                padding: '0.3rem 0.6rem',
+                borderRadius: '4px',
+                border: '1px solid #222',
+                backgroundColor:
+                  isProjectRoute ? '#222' : 'transparent',
+                color: isProjectRoute ? '#fff' : '#222',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+              }}
+            >
+              Current project
+            </button>
+          )}
+        </nav>
         {user && (
-          <div style={{ textAlign: 'right', fontSize: '0.9rem' }}>
-            <div>Signed in as</div>
-            <div style={{ fontWeight: 600 }}>{user.email}</div>
+          <div style={{ textAlign: 'right' }}>
             <button
               type="button"
               onClick={handleLogout}
               disabled={authLoading}
-              style={{ marginTop: '0.5rem' }}
+              style={{ padding: '0.4rem 0.75rem' }}
             >
               {authLoading ? 'Logging out…' : 'Log out'}
             </button>
@@ -886,113 +1394,114 @@ function App() {
         )}
       </header>
 
+      {!isAuthenticated && (
+        <section
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginBottom: '1.5rem',
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Account</h2>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={() => setAuthMode('login')}
+              disabled={authMode === 'login'}
+              style={{
+                marginRight: '0.5rem',
+                padding: '0.4rem 0.75rem',
+                backgroundColor:
+                  authMode === 'login' ? '#222' : 'transparent',
+                color: authMode === 'login' ? '#fff' : '#222',
+                border: '1px solid #222',
+                borderRadius: '4px',
+                cursor: authMode === 'login' ? 'default' : 'pointer',
+              }}
+            >
+              Log in
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthMode('register')}
+              disabled={authMode === 'register'}
+              style={{
+                padding: '0.4rem 0.75rem',
+                backgroundColor:
+                  authMode === 'register' ? '#222' : 'transparent',
+                color: authMode === 'register' ? '#fff' : '#222',
+                border: '1px solid #222',
+                borderRadius: '4px',
+                cursor: authMode === 'register' ? 'default' : 'pointer',
+              }}
+            >
+              Register
+            </button>
+          </div>
+
+          {authError && (
+            <p style={{ color: 'red', marginBottom: '0.75rem' }}>
+              {authError}
+            </p>
+          )}
+
+          <form onSubmit={handleAuthSubmit}>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.25rem' }}>
+                Email
+              </label>
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem' }}
+              />
+            </div>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.25rem' }}>
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                style={{ width: '100%', padding: '0.4rem' }}
+              />
+            </div>
+            <button type="submit" disabled={authLoading}>
+              {authLoading
+                ? authMode === 'login'
+                  ? 'Logging in…'
+                  : 'Registering…'
+                : authMode === 'login'
+                ? 'Log in'
+                : 'Register'}
+            </button>
+          </form>
+        </section>
+      )}
+
       <section
         style={{
           border: '1px solid #ddd',
           borderRadius: '8px',
           padding: '1rem',
-          marginBottom: '1.5rem',
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Account</h2>
-        {!isAuthenticated && (
-          <>
-            <div style={{ marginBottom: '0.75rem' }}>
-              <button
-                type="button"
-                onClick={() => setAuthMode('login')}
-                disabled={authMode === 'login'}
-                style={{
-                  marginRight: '0.5rem',
-                  padding: '0.4rem 0.75rem',
-                  backgroundColor:
-                    authMode === 'login' ? '#222' : 'transparent',
-                  color: authMode === 'login' ? '#fff' : '#222',
-                  border: '1px solid #222',
-                  borderRadius: '4px',
-                  cursor: authMode === 'login' ? 'default' : 'pointer',
-                }}
-              >
-                Log in
-              </button>
-              <button
-                type="button"
-                onClick={() => setAuthMode('register')}
-                disabled={authMode === 'register'}
-                style={{
-                  padding: '0.4rem 0.75rem',
-                  backgroundColor:
-                    authMode === 'register' ? '#222' : 'transparent',
-                  color: authMode === 'register' ? '#fff' : '#222',
-                  border: '1px solid #222',
-                  borderRadius: '4px',
-                  cursor: authMode === 'register' ? 'default' : 'pointer',
-                }}
-              >
-                Register
-              </button>
-            </div>
-
-            {authError && (
-              <p style={{ color: 'red', marginBottom: '0.75rem' }}>
-                {authError}
-              </p>
-            )}
-
-            <form onSubmit={handleAuthSubmit}>
-              <div style={{ marginBottom: '0.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem' }}
-                />
-              </div>
-              <div style={{ marginBottom: '0.75rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                  Password
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem' }}
-                />
-              </div>
-              <button type="submit" disabled={authLoading}>
-                {authLoading
-                  ? authMode === 'login'
-                    ? 'Logging in…'
-                    : 'Registering…'
-                  : authMode === 'login'
-                  ? 'Log in'
-                  : 'Register'}
-              </button>
-            </form>
-          </>
-        )}
-        {isAuthenticated && (
-          <p style={{ marginBottom: 0 }}>
-            You are signed in. Use the Spaces section below to manage your
-            spaces.
+        <h2 style={{ marginTop: 0 }}>
+          {isDashboardRoute && 'Spaces, Projects & Assets'}
+          {isSpaceContextRoute && (currentSpace?.name ?? 'Space')}
+          {isProjectRoute && (currentProject?.name ?? 'Project')}
+        </h2>
+        {isProjectRoute && (
+          <p style={{ marginTop: '0.25rem', marginBottom: '0.75rem' }}>
+            new stuff
           </p>
         )}
-      </section>
-
-      <section
-        style={{
-          border: '1px solid #ddd',
-          borderRadius: '8px',
-          padding: '1rem',
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Spaces, Projects & Assets</h2>
         {!isAuthenticated && (
           <p style={{ color: '#555' }}>
             Log in or register to view and create spaces.
@@ -1000,704 +1509,426 @@ function App() {
         )}
         {isAuthenticated && (
           <>
-            <form
-              onSubmit={handleCreateSpace}
-              style={{ marginBottom: '1rem', display: 'grid', gap: '0.5rem' }}
-            >
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                  Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newSpaceName}
-                  onChange={(e) => setNewSpaceName(e.target.value)}
-                  style={{ width: '100%', padding: '0.4rem' }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.25rem' }}>
-                  Description (optional)
-                </label>
-                <textarea
-                  value={newSpaceDescription}
-                  onChange={(e) => setNewSpaceDescription(e.target.value)}
-                  rows={2}
-                  style={{ width: '100%', padding: '0.4rem' }}
-                />
-              </div>
-              {createSpaceError && (
-                <p style={{ color: 'red', margin: 0 }}>{createSpaceError}</p>
-              )}
-              <div>
-                <button type="submit" disabled={createSpaceLoading}>
-                  {createSpaceLoading ? 'Creating…' : 'Create space'}
-                </button>
-              </div>
-            </form>
-
-            {spacesLoading && <p>Loading spaces…</p>}
-            {spacesError && (
-              <p style={{ color: 'red', marginTop: 0 }}>{spacesError}</p>
+            {isDashboardRoute && (
+              <DashboardView
+                spaces={spaces}
+                spacesLoading={spacesLoading}
+                spacesError={spacesError}
+                newSpaceName={newSpaceName}
+                newSpaceDescription={newSpaceDescription}
+                setNewSpaceName={setNewSpaceName}
+                setNewSpaceDescription={setNewSpaceDescription}
+                createSpaceLoading={createSpaceLoading}
+                createSpaceError={createSpaceError}
+                selectedSpaceId={selectedSpaceId}
+                onSubmitCreateSpace={handleCreateSpace}
+                onOpenSpace={(spaceId) => {
+                  handleSelectSpace(spaceId);
+                  navigateTo({ kind: 'space', spaceId });
+                }}
+              />
             )}
-            {!spacesLoading && !spacesError && spaces.length === 0 && (
-              <p>No spaces yet. Create your first one above.</p>
+
+            {isSpaceOverviewRoute && selectedSpaceId && (
+              <SpaceView
+                projects={projects}
+                projectsLoading={projectsLoading}
+                projectsError={projectsError}
+                selectedProjectId={selectedProjectId}
+                newProjectName={newProjectName}
+                newProjectDescription={newProjectDescription}
+                setNewProjectName={setNewProjectName}
+                setNewProjectDescription={setNewProjectDescription}
+                createProjectLoading={createProjectLoading}
+                createProjectError={createProjectError}
+                spaceCharacters={spaceCharacters}
+                spaceScenes={spaceScenes}
+                spaceStyles={spaceStyles}
+                definitionsLoading={definitionsLoading}
+                definitionsError={definitionsError}
+                deleteDefinitionLoadingId={deleteDefinitionLoadingId}
+                deleteDefinitionError={deleteDefinitionError}
+                onSubmitCreateProject={handleCreateProject}
+                onOpenProject={(projectId) => {
+                  handleSelectProject(projectId);
+                  navigateTo({ kind: 'project', projectId });
+                }}
+                onCreateCharacter={() => {
+                  if (!selectedSpaceId) return;
+                  navigateTo({
+                    kind: 'spaceNewCharacter',
+                    spaceId: selectedSpaceId,
+                  });
+                }}
+                onCreateScene={() => {
+                  if (!selectedSpaceId) return;
+                  navigateTo({
+                    kind: 'spaceNewScene',
+                    spaceId: selectedSpaceId,
+                  });
+                }}
+                onCreateStyle={() => {
+                  if (!selectedSpaceId) return;
+                  navigateTo({
+                    kind: 'spaceNewStyle',
+                    spaceId: selectedSpaceId,
+                  });
+                }}
+                onDeleteDefinition={handleDeleteSpaceDefinition}
+              />
             )}
-            {!spacesLoading && !spacesError && spaces.length > 0 && (
-              <>
-                <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-                  {spaces.map((space) => {
-                    const isSelected = selectedSpaceId === space.id;
-                    return (
-                      <li
-                        key={space.id}
-                        style={{
-                          padding: '0.5rem 0',
-                          borderBottom: '1px solid #eee',
-                          cursor: 'pointer',
-                          backgroundColor: isSelected ? '#f5f5f5' : 'transparent',
-                        }}
-                        onClick={() => handleSelectSpace(space.id)}
-                      >
-                        <div style={{ fontWeight: 600 }}>{space.name}</div>
-                        {space.description && (
-                          <div style={{ fontSize: '0.9rem', color: '#555' }}>
-                            {space.description}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
 
-                {selectedSpaceId && (
-                  <div
-                    style={{
-                      marginTop: '1.5rem',
-                      borderTop: '1px solid #eee',
-                      paddingTop: '1rem',
-                    }}
-                  >
-                    <h3 style={{ marginTop: 0 }}>Projects in selected space</h3>
-                    <form
-                      onSubmit={handleCreateProject}
-                      style={{
-                        marginBottom: '1rem',
-                        display: 'grid',
-                        gap: '0.5rem',
-                      }}
-                    >
-                      <div>
-                        <label
-                          style={{
-                            display: 'block',
-                            marginBottom: '0.25rem',
-                          }}
-                        >
-                          Project name
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={newProjectName}
-                          onChange={(e) => setNewProjectName(e.target.value)}
-                          style={{ width: '100%', padding: '0.4rem' }}
-                        />
-                      </div>
-                      <div>
-                        <label
-                          style={{
-                            display: 'block',
-                            marginBottom: '0.25rem',
-                          }}
-                        >
-                          Description (optional)
-                        </label>
-                        <textarea
-                          value={newProjectDescription}
-                          onChange={(e) =>
-                            setNewProjectDescription(e.target.value)
-                          }
-                          rows={2}
-                          style={{ width: '100%', padding: '0.4rem' }}
-                        />
-                      </div>
-                      {createProjectError && (
-                        <p style={{ color: 'red', margin: 0 }}>
-                          {createProjectError}
-                        </p>
-                      )}
-                      <div>
-                        <button type="submit" disabled={createProjectLoading}>
-                          {createProjectLoading
-                            ? 'Creating…'
-                            : 'Create project'}
-                        </button>
-                      </div>
-                    </form>
-
-                    {projectsLoading && <p>Loading projects…</p>}
-                    {projectsError && (
-                      <p style={{ color: 'red', marginTop: 0 }}>
-                        {projectsError}
-                      </p>
-                    )}
-                    {!projectsLoading &&
-                      !projectsError &&
-                      projects.length === 0 && (
-                        <p>
-                          No projects yet in this space. Create your first one
-                          above.
-                        </p>
-                      )}
-                    {!projectsLoading &&
-                      !projectsError &&
-                      projects.length > 0 && (
-                        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-                          {projects.map((project) => (
-                            <li
-                              key={project.id}
-                              style={{
-                                padding: '0.5rem 0',
-                                borderBottom: '1px solid #eee',
-                                cursor: 'pointer',
-                                backgroundColor:
-                                  selectedProjectId === project.id
-                                    ? '#f0f0f0'
-                                    : 'transparent',
-                              }}
-                              onClick={() => handleSelectProject(project.id)}
-                            >
-                              <div style={{ fontWeight: 600 }}>
-                                {project.name}
-                              </div>
-                              {project.description && (
-                                <div
-                                  style={{
-                                    fontSize: '0.9rem',
-                                    color: '#555',
-                                  }}
-                                >
-                                  {project.description}
-                                </div>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    {selectedSpaceId && (
-                      <div
-                        style={{
-                          marginTop: '1.5rem',
-                          borderTop: '1px solid #eee',
-                          paddingTop: '1rem',
-                        }}
-                      >
-                        <h3 style={{ marginTop: 0 }}>
-                          Space assets (characters & scenes)
-                        </h3>
-
-                        {definitionsError && (
-                          <p style={{ color: 'red', marginTop: 0 }}>
-                            {definitionsError}
-                          </p>
-                        )}
-
-                        <form
-                          onSubmit={(e) => handleCreateDefinition(e, 'character')}
-                          style={{
-                            marginBottom: '0.75rem',
-                            display: 'grid',
-                            gap: '0.4rem',
-                          }}
-                        >
-                          <strong>New character</strong>
-                          <input
-                            type="text"
-                            placeholder="Character name"
-                            required
-                            value={newCharacterName}
-                            onChange={(e) =>
-                              setNewCharacterName(e.target.value)
-                            }
-                            style={{ width: '100%', padding: '0.4rem' }}
-                          />
-                          <textarea
-                            placeholder="Description (optional)"
-                            value={newCharacterDescription}
-                            onChange={(e) =>
-                              setNewCharacterDescription(e.target.value)
-                            }
-                            rows={2}
-                            style={{ width: '100%', padding: '0.4rem' }}
-                          />
-                          <button
-                            type="submit"
-                            disabled={createDefinitionLoading}
-                          >
-                            {createDefinitionLoading
-                              ? 'Creating…'
-                              : 'Add character'}
-                          </button>
-                        </form>
-
-                        <form
-                          onSubmit={(e) => handleCreateDefinition(e, 'scene')}
-                          style={{
-                            marginBottom: '0.75rem',
-                            display: 'grid',
-                            gap: '0.4rem',
-                          }}
-                        >
-                          <strong>New scene</strong>
-                          <input
-                            type="text"
-                            placeholder="Scene name"
-                            required
-                            value={newSceneName}
-                            onChange={(e) => setNewSceneName(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem' }}
-                          />
-                          <textarea
-                            placeholder="Description (optional)"
-                            value={newSceneDescription}
-                            onChange={(e) =>
-                              setNewSceneDescription(e.target.value)
-                            }
-                            rows={2}
-                            style={{ width: '100%', padding: '0.4rem' }}
-                          />
-                          <button
-                            type="submit"
-                            disabled={createDefinitionLoading}
-                          >
-                            {createDefinitionLoading
-                              ? 'Creating…'
-                              : 'Add scene'}
-                          </button>
-                        </form>
-
-                        {definitionsLoading && <p>Loading assets…</p>}
-                        {!definitionsLoading &&
-                          !definitionsError &&
-                          spaceCharacters.length === 0 &&
-                          spaceScenes.length === 0 && (
-                            <p>
-                              No characters or scenes yet in this space. Create
-                              some above.
-                            </p>
-                          )}
-
-                        {!definitionsLoading &&
-                          (spaceCharacters.length > 0 ||
-                            spaceScenes.length > 0) && (
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 1fr',
-                                gap: '1rem',
-                                marginBottom: '1rem',
-                              }}
-                            >
-                              <div>
-                                <strong>Characters</strong>
-                                <ul
-                                  style={{
-                                    listStyle: 'none',
-                                    paddingLeft: 0,
-                                    marginTop: '0.5rem',
-                                  }}
-                                >
-                                  {spaceCharacters.map((c) => (
-                                    <li
-                                      key={c.id}
-                                      style={{
-                                        padding: '0.4rem 0',
-                                        borderBottom: '1px solid #eee',
-                                      }}
-                                    >
-                                      <div style={{ fontWeight: 600 }}>
-                                        {c.name}
-                                      </div>
-                                      {c.description && (
-                                        <div
-                                          style={{
-                                            fontSize: '0.85rem',
-                                            color: '#555',
-                                          }}
-                                        >
-                                          {c.description}
-                                        </div>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                              <div>
-                                <strong>Scenes</strong>
-                                <ul
-                                  style={{
-                                    listStyle: 'none',
-                                    paddingLeft: 0,
-                                    marginTop: '0.5rem',
-                                  }}
-                                >
-                                  {spaceScenes.map((s) => (
-                                    <li
-                                      key={s.id}
-                                      style={{
-                                        padding: '0.4rem 0',
-                                        borderBottom: '1px solid #eee',
-                                      }}
-                                    >
-                                      <div style={{ fontWeight: 600 }}>
-                                        {s.name}
-                                      </div>
-                                      {s.description && (
-                                        <div
-                                          style={{
-                                            fontSize: '0.85rem',
-                                            color: '#555',
-                                          }}
-                                        >
-                                          {s.description}
-                                        </div>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </div>
-                          )}
-
-                        {selectedProjectId && (
-                          <div
-                            style={{
-                              marginTop: '1rem',
-                              borderTop: '1px solid #eee',
-                              paddingTop: '1rem',
-                            }}
-                          >
-                            <form onSubmit={handleImportDefinitionsToProject}>
-                              <button type="submit" disabled={importLoading}>
-                                {importLoading
-                                  ? 'Importing…'
-                                  : 'Import all characters & scenes into selected project'}
-                              </button>
-                              {importError && (
-                                <p
-                                  style={{
-                                    color: 'red',
-                                    marginTop: '0.5rem',
-                                  }}
-                                >
-                                  {importError}
-                                </p>
-                              )}
-                            </form>
-
-                            <div
-                              style={{
-                                marginTop: '1.5rem',
-                                borderTop: '1px solid #eee',
-                                paddingTop: '1rem',
-                              }}
-                            >
-                              <h4 style={{ marginTop: 0 }}>
-                                Tasks & renders for selected project
-                              </h4>
-
-                              <form
-                                onSubmit={handleCreateTask}
-                                style={{
-                                  marginBottom: '1rem',
-                                  display: 'grid',
-                                  gap: '0.5rem',
-                                }}
-                              >
-                                <div>
-                                  <label
-                                    style={{
-                                      display: 'block',
-                                      marginBottom: '0.25rem',
-                                    }}
-                                  >
-                                    Task name
-                                  </label>
-                                  <input
-                                    type="text"
-                                    required
-                                    value={newTaskName}
-                                    onChange={(e) =>
-                                      setNewTaskName(e.target.value)
-                                    }
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.4rem',
-                                    }}
-                                  />
-                                </div>
-                                <div>
-                                  <label
-                                    style={{
-                                      display: 'block',
-                                      marginBottom: '0.25rem',
-                                    }}
-                                  >
-                                    Prompt (optional)
-                                  </label>
-                                  <textarea
-                                    value={newTaskPrompt}
-                                    onChange={(e) =>
-                                      setNewTaskPrompt(e.target.value)
-                                    }
-                                    rows={2}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.4rem',
-                                    }}
-                                  />
-                                </div>
-                                <div>
-                                  <label
-                                    style={{
-                                      display: 'block',
-                                      marginBottom: '0.25rem',
-                                    }}
-                                  >
-                                    Description (optional)
-                                  </label>
-                                  <textarea
-                                    value={newTaskDescription}
-                                    onChange={(e) =>
-                                      setNewTaskDescription(e.target.value)
-                                    }
-                                    rows={2}
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.4rem',
-                                    }}
-                                  />
-                                </div>
-                                {createTaskError && (
-                                  <p
-                                    style={{
-                                      color: 'red',
-                                      margin: 0,
-                                    }}
-                                  >
-                                    {createTaskError}
-                                  </p>
-                                )}
-                                <div>
-                                  <button
-                                    type="submit"
-                                    disabled={createTaskLoading}
-                                  >
-                                    {createTaskLoading
-                                      ? 'Creating…'
-                                      : 'Create task'}
-                                  </button>
-                                </div>
-                              </form>
-
-                              {tasksLoading && <p>Loading tasks…</p>}
-                              {tasksError && (
-                                <p
-                                  style={{
-                                    color: 'red',
-                                    marginTop: 0,
-                                  }}
-                                >
-                                  {tasksError}
-                                </p>
-                              )}
-                              {!tasksLoading &&
-                                !tasksError &&
-                                tasks.length === 0 && (
-                                  <p>
-                                    No tasks yet for this project. Create one
-                                    above.
-                                  </p>
-                                )}
-                              {!tasksLoading &&
-                                !tasksError &&
-                                tasks.length > 0 && (
-                                  <ul
-                                    style={{
-                                      listStyle: 'none',
-                                      paddingLeft: 0,
-                                    }}
-                                  >
-                                    {tasks.map((task) => (
-                                      <li
-                                        key={task.id}
-                                        style={{
-                                          padding: '0.4rem 0',
-                                          borderBottom: '1px solid #eee',
-                                          display: 'flex',
-                                          justifyContent: 'space-between',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                        }}
-                                      >
-                                        <div>
-                                          <div style={{ fontWeight: 600 }}>
-                                            {task.name}
-                                          </div>
-                                          <div
-                                            style={{
-                                              fontSize: '0.85rem',
-                                              color: '#555',
-                                            }}
-                                          >
-                                            Status: {task.status}
-                                          </div>
-                                          {task.description && (
-                                            <div
-                                              style={{
-                                                fontSize: '0.85rem',
-                                                color: '#555',
-                                              }}
-                                            >
-                                              {task.description}
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              void handleRenderTask(task.id)
-                                            }
-                                            disabled={
-                                              renderingTaskId === task.id ||
-                                              task.status === 'running'
-                                            }
-                                          >
-                                            {renderingTaskId === task.id
-                                              ? 'Rendering…'
-                                              : 'Render'}
-                                          </button>
-                                        </div>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-
-                              {renderError && (
-                                <p
-                                  style={{
-                                    color: 'red',
-                                    marginTop: '0.5rem',
-                                  }}
-                                >
-                                  {renderError}
-                                </p>
-                              )}
-
-                              <div
-                                style={{
-                                  marginTop: '1.5rem',
-                                  borderTop: '1px solid #eee',
-                                  paddingTop: '1rem',
-                                }}
-                              >
-                                <h5 style={{ marginTop: 0 }}>
-                                  Rendered assets
-                                </h5>
-
-                                {assetsLoading && <p>Loading renders…</p>}
-                                {assetsError && (
-                                  <p
-                                    style={{
-                                      color: 'red',
-                                      marginTop: 0,
-                                    }}
-                                  >
-                                    {assetsError}
-                                  </p>
-                                )}
-                                {!assetsLoading &&
-                                  !assetsError &&
-                                  renderedAssets.length === 0 && (
-                                    <p>
-                                      No rendered assets yet for this project.
-                                      Run a render above.
-                                    </p>
-                                  )}
-                                {!assetsLoading &&
-                                  !assetsError &&
-                                  renderedAssets.length > 0 && (
-                                    <div
-                                      style={{
-                                        display: 'grid',
-                                        gridTemplateColumns:
-                                          'repeat(auto-fill, minmax(150px, 1fr))',
-                                        gap: '0.75rem',
-                                      }}
-                                    >
-                                      {renderedAssets.map((asset) => (
-                                        <div
-                                          key={asset.id}
-                                          style={{
-                                            border: '1px solid #eee',
-                                            borderRadius: '4px',
-                                            padding: '0.5rem',
-                                          }}
-                                        >
-                                          {asset.type === 'image' ? (
-                                            <a
-                                              href={asset.file_url}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                            >
-                                              <img
-                                                src={asset.file_url}
-                                                alt=""
-                                                style={{
-                                                  width: '100%',
-                                                  height: 'auto',
-                                                  display: 'block',
-                                                }}
-                                              />
-                                            </a>
-                                          ) : (
-                                            <a
-                                              href={asset.file_url}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                            >
-                                              {asset.file_key}
-                                            </a>
-                                          )}
-                                          <div
-                                            style={{
-                                              fontSize: '0.8rem',
-                                              color: '#555',
-                                              marginTop: '0.25rem',
-                                            }}
-                                          >
-                                            State: {asset.state}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
+            {isProjectRoute && (
+              <ProjectView
+                importLoading={importLoading}
+                importError={importError}
+                projectDefinitionsLoading={projectDefinitionsLoading}
+                projectDefinitionsError={projectDefinitionsError}
+                projectCharacters={projectCharacters}
+                projectScenes={projectScenes}
+                selectedCharacterId={selectedCharacterId}
+                setSelectedCharacterId={setSelectedCharacterId}
+                selectedSceneId={selectedSceneId}
+                setSelectedSceneId={setSelectedSceneId}
+                selectedStyleId={selectedStyleId}
+                setSelectedStyleId={setSelectedStyleId}
+                spaceStyles={spaceStyles}
+                tasksLoading={tasksLoading}
+                tasksError={tasksError}
+                tasks={tasks}
+                newTaskName={newTaskName}
+                setNewTaskName={setNewTaskName}
+                newTaskPrompt={newTaskPrompt}
+                setNewTaskPrompt={setNewTaskPrompt}
+                newTaskDescription={newTaskDescription}
+                setNewTaskDescription={setNewTaskDescription}
+                createTaskLoading={createTaskLoading}
+                createTaskError={createTaskError}
+                renderingTaskId={renderingTaskId}
+                renderError={renderError}
+                assetsLoading={assetsLoading}
+                assetsError={assetsError}
+                renderedAssets={renderedAssets}
+                onImportDefinitionsToProject={handleImportDefinitionsToProject}
+                onCreateTask={handleCreateTask}
+                onRenderTask={handleRenderTask}
+              />
             )}
           </>
         )}
       </section>
+
+      {isCreateCharacterRoute && currentSpace && (
+        <section
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginTop: '1.5rem',
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>
+            Create character in {currentSpace.name}
+          </h2>
+          <form
+            onSubmit={(e) => void handleCreateDefinition(e, 'character')}
+            style={{
+              marginTop: '0.5rem',
+              display: 'grid',
+              gap: '0.4rem',
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Character name"
+              required
+              value={newCharacterName}
+              onChange={(e) => setNewCharacterName(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <textarea
+              placeholder="Description (optional)"
+              value={newCharacterDescription}
+              onChange={(e) => setNewCharacterDescription(e.target.value)}
+              rows={2}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Age range (e.g. early_30s)"
+              value={characterAgeRange}
+              onChange={(e) => setCharacterAgeRange(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Gender identity (e.g. woman)"
+              value={characterGenderIdentity}
+              onChange={(e) => setCharacterGenderIdentity(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Pronouns (e.g. she_her)"
+              value={characterPronouns}
+              onChange={(e) => setCharacterPronouns(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Species (e.g. human)"
+              value={characterSpecies}
+              onChange={(e) => setCharacterSpecies(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Personality keywords (comma-separated)"
+              value={characterPersonality}
+              onChange={(e) => setCharacterPersonality(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Archetype (e.g. maverick)"
+              value={characterArchetype}
+              onChange={(e) => setCharacterArchetype(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <div style={{ marginTop: '0.5rem' }}>
+              <button
+                type="submit"
+                disabled={createDefinitionLoading}
+                style={{ marginRight: '0.5rem' }}
+              >
+                {createDefinitionLoading ? 'Saving…' : 'Save character'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  selectedSpaceId &&
+                  navigateTo({ kind: 'space', spaceId: selectedSpaceId })
+                }
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {isCreateSceneRoute && currentSpace && (
+        <section
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginTop: '1.5rem',
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Create scene in {currentSpace.name}</h2>
+          <form
+            onSubmit={(e) => void handleCreateDefinition(e, 'scene')}
+            style={{
+              marginTop: '0.5rem',
+              display: 'grid',
+              gap: '0.4rem',
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Scene name"
+              required
+              value={newSceneName}
+              onChange={(e) => setNewSceneName(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <textarea
+              placeholder="Description (optional)"
+              value={newSceneDescription}
+              onChange={(e) => setNewSceneDescription(e.target.value)}
+              rows={3}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <div style={{ marginTop: '0.5rem' }}>
+              <button
+                type="submit"
+                disabled={createDefinitionLoading}
+                style={{ marginRight: '0.5rem' }}
+              >
+                {createDefinitionLoading ? 'Saving…' : 'Save scene'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  selectedSpaceId &&
+                  navigateTo({ kind: 'space', spaceId: selectedSpaceId })
+                }
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {isCreateStyleRoute && currentSpace && (
+        <section
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '1rem',
+            marginTop: '1.5rem',
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Create style in {currentSpace.name}</h2>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!user || !selectedSpaceId) return;
+              setCreateDefinitionLoading(true);
+              (async () => {
+                try {
+                  const res = await fetch(
+                    `/api/spaces/${selectedSpaceId}/styles`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      credentials: 'include',
+                      body: JSON.stringify({
+                        name: newStyleName,
+                        description: newStyleDescription || null,
+                        metadata:
+                          newStyleRenderDomain || newStyleGenres
+                            ? {
+                                core_style: {
+                                  render_domain:
+                                    newStyleRenderDomain || undefined,
+                                  genre:
+                                    newStyleGenres
+                                      .split(',')
+                                      .map((token) => token.trim())
+                                      .filter(Boolean) || undefined,
+                                },
+                              }
+                            : null,
+                      }),
+                    },
+                  );
+
+                  const body = (await res.json().catch(() => null)) as
+                    | {
+                        style?: DefinitionSummary;
+                        error?: string;
+                      }
+                    | null;
+
+                  if (!res.ok) {
+                    const code = body?.error;
+                    if (code === 'NAME_REQUIRED') {
+                      // basic validation already enforced by required input
+                    } else if (code === 'UNAUTHENTICATED') {
+                      setUser(null);
+                      setSpaces([]);
+                      setSpaceCharacters([]);
+                      setSpaceScenes([]);
+                      setSpaceStyles([]);
+                    } else if (code === 'SPACE_NOT_FOUND') {
+                      // space no longer accessible
+                    } else {
+                      // eslint-disable-next-line no-console
+                      console.error('[styles] Create style error code:', code);
+                    }
+                    return;
+                  }
+
+                  if (body?.style) {
+                    setSpaceStyles((prev) => [
+                      body.style as DefinitionSummary,
+                      ...prev,
+                    ]);
+                    setNewStyleName('');
+                    setNewStyleDescription('');
+                    setNewStyleRenderDomain('');
+                    setNewStyleGenres('');
+
+                    if (selectedSpaceId) {
+                      navigateTo({ kind: 'space', spaceId: selectedSpaceId });
+                    }
+                  } else {
+                    // eslint-disable-next-line no-console
+                    console.error('Style was created but not returned.');
+                  }
+                } catch (err) {
+                  const message =
+                    err instanceof Error
+                      ? err.message
+                      : 'Failed to create style.';
+                  // eslint-disable-next-line no-console
+                  console.error('[styles] Create style error:', message);
+                } finally {
+                  setCreateDefinitionLoading(false);
+                }
+              })();
+            }}
+            style={{
+              marginTop: '0.5rem',
+              display: 'grid',
+              gap: '0.4rem',
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Style name"
+              required
+              value={newStyleName}
+              onChange={(e) => setNewStyleName(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <textarea
+              placeholder="Description (optional)"
+              value={newStyleDescription}
+              onChange={(e) => setNewStyleDescription(e.target.value)}
+              rows={2}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Render domain (e.g. comic_illustration)"
+              value={newStyleRenderDomain}
+              onChange={(e) => setNewStyleRenderDomain(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <input
+              type="text"
+              placeholder="Genres (comma-separated, e.g. sci_fi, fantasy)"
+              value={newStyleGenres}
+              onChange={(e) => setNewStyleGenres(e.target.value)}
+              style={{ width: '100%', padding: '0.4rem' }}
+            />
+            <div style={{ marginTop: '0.5rem' }}>
+              <button
+                type="submit"
+                disabled={createDefinitionLoading}
+                style={{ marginRight: '0.5rem' }}
+              >
+                {createDefinitionLoading ? 'Saving…' : 'Save style'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  selectedSpaceId &&
+                  navigateTo({ kind: 'space', spaceId: selectedSpaceId })
+                }
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
     </main>
   );
 }

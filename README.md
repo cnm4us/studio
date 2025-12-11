@@ -133,9 +133,13 @@ Render flow (high level):
 - `POST /api/spaces/:spaceId/projects` → creates a new project in the given Space.
 - `GET /api/spaces/:spaceId/characters` → lists Space-level character definitions for a Space owned by the user.
 - `POST /api/spaces/:spaceId/characters` → creates a new Space-level character definition.
+- `DELETE /api/spaces/:spaceId/characters/:definitionId` → deletes a Space-level character definition if it is not locked (returns `DEFINITION_LOCKED` when imported into projects).
 - `GET /api/spaces/:spaceId/scenes` → lists Space-level scene definitions.
 - `POST /api/spaces/:spaceId/scenes` → creates a new Space-level scene definition.
+- `DELETE /api/spaces/:spaceId/scenes/:definitionId` → deletes a Space-level scene definition if it is not locked (returns `DEFINITION_LOCKED` when imported into projects).
 - `POST /api/projects/:projectId/import` → imports Space-level characters/scenes into a Project as project-scoped definitions using lineage fields.
+- `GET /api/projects/:projectId/definitions/characters` → lists project-scoped character definitions imported into the Project.
+- `GET /api/projects/:projectId/definitions/scenes` → lists project-scoped scene definitions imported into the Project.
 - `POST /api/projects/:projectId/tasks` → creates a new Task for the given Project with optional description and prompt.
 - `GET /api/projects/:projectId/tasks` → lists Tasks for the given Project.
 - `POST /api/tasks/:taskId/render` → synchronously renders an image for the Task using Gemini, uploads it to S3, creates a RenderedAsset, and updates Task status.
@@ -164,10 +168,14 @@ The app currently:
 
 - Calls `/api/auth/me` on load to detect an existing session.
 - Provides simple login/register forms wired to `/api/auth/login` and `/api/auth/register`.
-- Shows a Spaces dashboard backed by `/api/spaces` where authenticated users can create and list their spaces.
-- Allows selecting a Space and, for the selected Space, viewing and creating Projects backed by `/api/spaces/:spaceId/projects`.
-- Shows simple Space-level character and scene lists per Space, with forms to add new definitions.
-- Provides an “Import all characters & scenes into selected project” action that clones Space-level definitions into the selected Project using `/api/projects/:projectId/import`.
+- Uses a lightweight hash-based router with three main views:
+  - `#/dashboard` — default entry point with a Spaces list and create form.
+  - `#/spaces/:spaceId` — Space view showing projects in that Space and Space-level assets (characters, scenes, styles).
+  - `#/projects/:projectId` — Project view showing imported project assets and tasks/renders for the selected project.
+- Allows selecting and creating Spaces backed by `/api/spaces`.
+- From a Space view, allows creating Projects backed by `/api/spaces/:spaceId/projects`.
+- From a Space view, shows Space-level character/scene/style lists per Space, with forms to add new definitions.
+- From a Project view, provides an “Import all characters & scenes into selected project” action that clones Space-level definitions into the selected Project using `/api/projects/:projectId/import`, and shows a Project-level view of imported characters/scenes along with Tasks and rendered assets.
 
 ### Build for production
 

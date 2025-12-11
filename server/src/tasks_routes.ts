@@ -13,6 +13,10 @@ import {
 } from './tasks_service.js';
 import type { RenderedAssetRecord } from './tasks_service.js';
 import { renderImageWithGemini } from './gemini_client.js';
+import type {
+  CharacterAppearanceMetadata,
+  StyleDefinitionMetadata,
+} from './definition_metadata.js';
 import { uploadImageToS3 } from './s3_client.js';
 
 type AuthedRequest = Request & { user?: PublicUser };
@@ -20,6 +24,9 @@ type AuthedRequest = Request & { user?: PublicUser };
 type ProjectRecord = {
   id: number;
   space_id: number;
+  name: string;
+  description: string | null;
+  created_at: Date;
 };
 
 type TaskWithProject = {
@@ -94,7 +101,7 @@ const loadOwnedProjectOr404 = async (
 
   const db = getDbPool();
   const [rows] = await db.query(
-    `SELECT p.id, p.space_id
+    `SELECT p.id, p.space_id, p.name, p.description, p.created_at
      FROM projects p
      JOIN spaces s ON s.id = p.space_id
      WHERE p.id = ? AND s.user_id = ?
@@ -145,6 +152,28 @@ const loadOwnedTaskOr404 = async (
 
   return list[0];
 };
+
+// Project details, tasks and rendered assets
+
+projectsRouter.get(
+  '/',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const project = await loadOwnedProjectOr404(req, res);
+    if (!project) {
+      return;
+    }
+
+    res.status(200).json({
+      project: {
+        id: project.id,
+        spaceId: project.space_id,
+        name: project.name,
+        description: project.description,
+        createdAt: project.created_at,
+      },
+    });
+  },
+);
 
 // Project-scoped tasks and rendered assets
 
@@ -232,7 +261,14 @@ taskRenderRouter.post(
       return;
     }
 
-    let prompt = (req.body as { prompt?: string | null })?.prompt ?? null;
+    const input = req.body as {
+      prompt?: string | null;
+      characterDefinitionId?: number | null;
+      styleDefinitionId?: number | null;
+      sceneDefinitionId?: number | null;
+    };
+
+    let prompt = input?.prompt ?? null;
     if (!prompt || prompt.trim().length === 0) {
       if (task.prompt && task.prompt.trim().length > 0) {
         prompt = task.prompt;
@@ -244,7 +280,108 @@ taskRenderRouter.post(
     try {
       await updateTaskStatus(task.id, 'running');
 
-      const image = await renderImageWithGemini(prompt);
+      const db = getDbPool();
+
+      let characterDefinition: any | null = null;
+      let styleDefinition: any | null = null;
+      let sceneDefinition: any | null = null;
+
+      if (input?.characterDefinitionId) {
+        const [rows] = await db.query(
+          `SELECT *
+           FROM definitions
+           WHERE id = ?
+             AND (
+               (scope = 'project' AND project_id = ?)
+               OR (scope = 'space' AND space_id = ?)
+             )
+             AND type = 'character'
+           LIMIT 1`,
+          [input.characterDefinitionId, task.project_id, task.space_id],
+        );
+        const list = rows as any[];
+        if (list.length === 0) {
+          res.status(400).json({ error: 'CHARACTER_DEFINITION_NOT_FOUND' });
+          return;
+        }
+        characterDefinition = list[0];
+      }
+
+      if (input?.styleDefinitionId) {
+        const [rows] = await db.query(
+          `SELECT *
+           FROM definitions
+           WHERE id = ?
+             AND (
+               (scope = 'project' AND project_id = ?)
+               OR (scope = 'space' AND space_id = ?)
+             )
+             AND type = 'style'
+           LIMIT 1`,
+          [input.styleDefinitionId, task.project_id, task.space_id],
+        );
+        const list = rows as any[];
+        if (list.length === 0) {
+          res.status(400).json({ error: 'STYLE_DEFINITION_NOT_FOUND' });
+          return;
+        }
+        styleDefinition = list[0];
+      }
+
+      if (input?.sceneDefinitionId) {
+        const [rows] = await db.query(
+          `SELECT *
+           FROM definitions
+           WHERE id = ?
+             AND (
+               (scope = 'project' AND project_id = ?)
+               OR (scope = 'space' AND space_id = ?)
+             )
+             AND type = 'scene'
+           LIMIT 1`,
+          [input.sceneDefinitionId, task.project_id, task.space_id],
+        );
+        const list = rows as any[];
+        if (list.length === 0) {
+          res.status(400).json({ error: 'SCENE_DEFINITION_NOT_FOUND' });
+          return;
+        }
+        sceneDefinition = list[0];
+      }
+
+      const characterMeta =
+        (characterDefinition?.metadata as CharacterAppearanceMetadata | null) ??
+        null;
+      const styleMeta =
+        (styleDefinition?.metadata as StyleDefinitionMetadata | null) ?? null;
+      const sceneMeta = sceneDefinition?.metadata ?? null;
+
+      const promptParts: string[] = [prompt];
+
+      if (characterDefinition) {
+        const coreName = characterMeta?.core_identity?.name;
+        promptParts.push(
+          `Character details: ${
+            coreName ? `${coreName}, ` : ''
+          }appearance=${JSON.stringify(characterMeta ?? {})}`,
+        );
+      }
+
+      if (styleDefinition) {
+        promptParts.push(
+          `Style details: ${JSON.stringify(styleMeta ?? {})}`,
+        );
+      }
+
+      if (sceneDefinition) {
+        promptParts.push(
+          `Scene details: ${JSON.stringify(sceneMeta ?? {})}`,
+        );
+      }
+
+      const finalPrompt = promptParts.join('\n\n');
+
+      const image = await renderImageWithGemini(finalPrompt);
 
       const timestamp = Date.now();
       const extension =
@@ -262,10 +399,16 @@ taskRenderRouter.post(
       );
 
       const metadata = {
-        prompt,
+        prompt: finalPrompt,
         mimeType: image.mimeType,
         model:
           process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview',
+        characterDefinitionId: characterDefinition?.id ?? null,
+        styleDefinitionId: styleDefinition?.id ?? null,
+        characterMetadata: characterMeta ?? null,
+        styleMetadata: styleMeta ?? null,
+        sceneDefinitionId: sceneDefinition?.id ?? null,
+        sceneMetadata: sceneMeta ?? null,
       };
 
       const asset = await createRenderedAsset(
@@ -279,7 +422,6 @@ taskRenderRouter.post(
 
       await updateTaskStatus(task.id, 'completed');
 
-      const db = getDbPool();
       const [rows] = await db.query(
         'SELECT * FROM tasks WHERE id = ? LIMIT 1',
         [task.id],

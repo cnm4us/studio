@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS definitions (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  type ENUM('character', 'scene') NOT NULL,
+  type ENUM('character', 'scene', 'style') NOT NULL,
   scope ENUM('space', 'project') NOT NULL,
   space_id INT UNSIGNED NULL,
   project_id INT UNSIGNED NULL,
@@ -69,7 +69,9 @@ CREATE TABLE IF NOT EXISTS definitions (
     ON DELETE SET NULL
     ON UPDATE CASCADE,
   INDEX idx_definitions_space_type (space_id, type),
-  INDEX idx_definitions_project_type (project_id, type)
+  INDEX idx_definitions_project_type (project_id, type),
+  INDEX idx_definitions_root (root_id),
+  INDEX idx_definitions_parent (parent_id)
 );
 
 -- Tasks and rendered assets for basic render pipeline
@@ -108,4 +110,3 @@ CREATE TABLE IF NOT EXISTS rendered_assets (
   INDEX idx_rendered_assets_project (project_id),
   INDEX idx_rendered_assets_task (task_id)
 );
-

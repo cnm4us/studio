@@ -87,6 +87,25 @@
     - `CF_DOMAIN=studio-media.bawebtech.com` is set in `.env`, pointing to a CloudFront distribution configured to front the private `bacs-studio` S3 bucket.
     - IAM policies allow `s3:PutObject`, `s3:GetObject`, and `s3:ListBucket` for `bacs-studio`, and the bucket policy allows CloudFront access via the distribution ARN.
 
+- Definitions lineage & locks (Plan 06 – initial step):
+  - DB schema:
+    - Added lineage-focused indexes to `definitions` on `root_id` and `parent_id` in `db/migrations.sql` to support efficient ancestry queries.
+  - Backend:
+    - Extended `server/src/definitions_service.ts` so `PublicDefinition` now includes:
+      - `isCanonical` — true for Space-level definitions that are canonical (or where `root_id === id`).
+      - `isLocked` — for now, true for Space-level canonical definitions that have any project-scoped children (i.e., they’ve been imported at least once).
+    - Updated `listSpaceDefinitions` to compute project-child usage counts and populate `isLocked` based on child presence.
+    - Added `listProjectDefinitions(projectId, type)` to return project-scoped definitions for a given Project.
+    - Introduced `server/src/project_definitions_routes.ts`, mounted at `/api/projects/:projectId/definitions`, with:
+      - `GET /characters` → lists project-scoped character definitions.
+      - `GET /scenes` → lists project-scoped scene definitions.
+  - Frontend:
+    - Updated `DefinitionSummary` in `client/src/App.tsx` to accept `isCanonical` and `isLocked` from the API.
+    - Space assets panel now labels characters/scenes as “Canonical”/“Draft” and “Locked” where appropriate.
+    - Added a “Project assets (imported characters & scenes)” section in the selected Project view:
+      - Uses `GET /api/projects/:projectId/definitions/characters|scenes` to show imported project-level definitions, with simple text indicating their Space origin via `parentId`.
+
+
 - Frontend wiring:
   - Replaced the placeholder `client/src/App.tsx` with a minimal auth + spaces UI:
     - Calls `/api/auth/me` on load to detect an existing session.

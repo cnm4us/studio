@@ -9,7 +9,8 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "auth:test": "tsx src/dev_auth_test.ts"
+    "auth:test": "tsx src/dev_auth_test.ts",
+    "seed:legacy": "tsx src/seed_legacy_definitions.ts"
   },
   "engines": {
     "node": ">=22 <23"
