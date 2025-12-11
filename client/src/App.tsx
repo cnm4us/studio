@@ -4,6 +4,12 @@ import './App.css';
 import { DashboardView } from './views/DashboardView';
 import { ProjectView } from './views/ProjectView';
 import { SpaceView } from './views/SpaceView';
+import type {
+  CharacterAppearanceMetadata,
+  StyleDefinitionMetadata,
+} from './definitionMetadata';
+import { characterAppearanceConfig } from './config/characterAppearance';
+import { styleDefinitionConfig } from './config/styleDefinitions';
 
 type PublicUser = {
   id: number;
@@ -171,14 +177,9 @@ function App() {
   const [definitionsLoading, setDefinitionsLoading] = useState(false);
   const [definitionsError, setDefinitionsError] = useState<string | null>(null);
   const [newCharacterName, setNewCharacterName] = useState('');
-  const [newCharacterDescription, setNewCharacterDescription] =
-    useState('');
-  const [characterAgeRange, setCharacterAgeRange] = useState('');
-  const [characterGenderIdentity, setCharacterGenderIdentity] = useState('');
-  const [characterPronouns, setCharacterPronouns] = useState('');
-  const [characterSpecies, setCharacterSpecies] = useState('');
-  const [characterPersonality, setCharacterPersonality] = useState('');
-  const [characterArchetype, setCharacterArchetype] = useState('');
+  const [newCharacterDescription, setNewCharacterDescription] = useState('');
+  const [characterMetadata, setCharacterMetadata] =
+    useState<CharacterAppearanceMetadata>({});
   const [newSceneName, setNewSceneName] = useState('');
   const [newSceneDescription, setNewSceneDescription] = useState('');
   const [createDefinitionLoading, setCreateDefinitionLoading] = useState(false);
@@ -193,8 +194,8 @@ function App() {
   const [spaceStyles, setSpaceStyles] = useState<DefinitionSummary[]>([]);
   const [newStyleName, setNewStyleName] = useState('');
   const [newStyleDescription, setNewStyleDescription] = useState('');
-  const [newStyleRenderDomain, setNewStyleRenderDomain] = useState('');
-  const [newStyleGenres, setNewStyleGenres] = useState('');
+  const [styleMetadata, setStyleMetadata] =
+    useState<StyleDefinitionMetadata>({});
 
   const [projectCharacters, setProjectCharacters] = useState<
     DefinitionSummary[]
@@ -928,22 +929,12 @@ function App() {
       ? newCharacterDescription
       : newSceneDescription;
 
-    const metadata = isCharacter
+    const metadata: CharacterAppearanceMetadata | undefined = isCharacter
       ? {
+          ...characterMetadata,
           core_identity: {
+            ...(characterMetadata.core_identity ?? {}),
             name,
-            age_range: characterAgeRange || undefined,
-            gender_identity: characterGenderIdentity || undefined,
-            pronouns: characterPronouns || undefined,
-            species: characterSpecies || undefined,
-            personality_keywords:
-              characterPersonality.trim().length > 0
-                ? characterPersonality
-                    .split(',')
-                    .map((token) => token.trim())
-                    .filter(Boolean)
-                : undefined,
-            archetype: characterArchetype || undefined,
           },
         }
       : undefined;
@@ -989,12 +980,7 @@ function App() {
         setSpaceCharacters((prev) => [body.character as DefinitionSummary, ...prev]);
         setNewCharacterName('');
         setNewCharacterDescription('');
-        setCharacterAgeRange('');
-        setCharacterGenderIdentity('');
-        setCharacterPronouns('');
-        setCharacterSpecies('');
-        setCharacterPersonality('');
-        setCharacterArchetype('');
+        setCharacterMetadata({});
       } else if (!isCharacter && body?.scene) {
         setSpaceScenes((prev) => [body.scene as DefinitionSummary, ...prev]);
         setNewSceneName('');
@@ -1016,6 +1002,80 @@ function App() {
         err instanceof Error ? err.message : 'Failed to create definition.';
       // eslint-disable-next-line no-console
       console.error('[definitions] Create definition error:', message);
+    } finally {
+      setCreateDefinitionLoading(false);
+    }
+  };
+
+  const handleCreateStyleDefinition = async (
+    event: FormEvent,
+  ): Promise<void> => {
+    event.preventDefault();
+    if (!user || !selectedSpaceId) return;
+
+    setCreateDefinitionLoading(true);
+
+    try {
+      const metadata: StyleDefinitionMetadata | null =
+        Object.keys(styleMetadata).length > 0 ? styleMetadata : null;
+
+      const res = await fetch(`/api/spaces/${selectedSpaceId}/styles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: newStyleName,
+          description: newStyleDescription || null,
+          metadata,
+        }),
+      });
+
+      const body = (await res.json().catch(() => null)) as
+        | {
+            style?: DefinitionSummary;
+            error?: string;
+          }
+        | null;
+
+      if (!res.ok) {
+        const code = body?.error;
+        if (code === 'NAME_REQUIRED') {
+          // basic validation already enforced by required input
+        } else if (code === 'UNAUTHENTICATED') {
+          setUser(null);
+          setSpaces([]);
+          setSpaceCharacters([]);
+          setSpaceScenes([]);
+          setSpaceStyles([]);
+        } else if (code === 'SPACE_NOT_FOUND') {
+          // space no longer accessible
+        } else {
+          // eslint-disable-next-line no-console
+          console.error('[styles] Create style error code:', code);
+        }
+        return;
+      }
+
+      if (body?.style) {
+        setSpaceStyles((prev) => [body.style as DefinitionSummary, ...prev]);
+        setNewStyleName('');
+        setNewStyleDescription('');
+        setStyleMetadata({});
+
+        if (selectedSpaceId) {
+          navigateTo({ kind: 'space', spaceId: selectedSpaceId });
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.error('Style was created but not returned.');
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to create style.';
+      // eslint-disable-next-line no-console
+      console.error('[styles] Create style error:', message);
     } finally {
       setCreateDefinitionLoading(false);
     }
@@ -1852,7 +1912,7 @@ function App() {
             padding: '1rem',
             marginTop: '1.5rem',
           }}
-        >
+      >
           <h2 style={{ marginTop: 0 }}>
             Create character in {currentSpace.name}
           </h2>
@@ -1879,48 +1939,181 @@ function App() {
               rows={2}
               style={{ width: '100%', padding: '0.4rem' }}
             />
-            <input
-              type="text"
-              placeholder="Age range (e.g. early_30s)"
-              value={characterAgeRange}
-              onChange={(e) => setCharacterAgeRange(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Gender identity (e.g. woman)"
-              value={characterGenderIdentity}
-              onChange={(e) => setCharacterGenderIdentity(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Pronouns (e.g. she_her)"
-              value={characterPronouns}
-              onChange={(e) => setCharacterPronouns(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Species (e.g. human)"
-              value={characterSpecies}
-              onChange={(e) => setCharacterSpecies(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Personality keywords (comma-separated)"
-              value={characterPersonality}
-              onChange={(e) => setCharacterPersonality(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Archetype (e.g. maverick)"
-              value={characterArchetype}
-              onChange={(e) => setCharacterArchetype(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
+            <div
+              style={{
+                marginTop: '0.5rem',
+                paddingTop: '0.5rem',
+                borderTop: '1px solid #eee',
+              }}
+            >
+              <h3 style={{ margin: '0 0 0.25rem' }}>Character appearance</h3>
+              <p
+                style={{
+                  margin: '0 0 0.5rem',
+                  fontSize: '0.85rem',
+                  color: '#555',
+                }}
+              >
+                Configure structured appearance and lore details. Fields marked as
+                comma-separated will be stored as tag lists.
+              </p>
+              {characterAppearanceConfig.categories
+                .slice()
+                .sort((a, b) => a.order - b.order)
+                .map((category) => (
+                  <div
+                    key={category.key}
+                    style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.5rem 0.25rem 0.25rem',
+                      borderTop: '1px solid #f0f0f0',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        marginBottom: '0.25rem',
+                      }}
+                    >
+                      {category.label}
+                    </div>
+                    {category.description && (
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: '#666',
+                          marginBottom: '0.25rem',
+                        }}
+                      >
+                        {category.description}
+                      </div>
+                    )}
+                    {category.properties.map((prop) => {
+                      if (
+                        category.key === 'core_identity' &&
+                        prop.key === 'name'
+                      ) {
+                        // Top-level name field already represents core_identity.name
+                        return null;
+                      }
+
+                      const categoryValue =
+                        (characterMetadata as any)[
+                          category.key as keyof CharacterAppearanceMetadata
+                        ] as Record<string, unknown> | undefined;
+                      const rawValue = categoryValue
+                        ? (categoryValue as any)[prop.key]
+                        : undefined;
+
+                      let inputValue = '';
+                      if (prop.type === 'tags') {
+                        inputValue = Array.isArray(rawValue)
+                          ? (rawValue as string[]).join(', ')
+                          : '';
+                      } else if (typeof rawValue === 'string') {
+                        inputValue = rawValue;
+                      }
+
+                      const inputId = `character-${category.key}-${prop.key}`;
+                      const datalistId =
+                        prop.options && prop.options.length > 0
+                          ? `${inputId}-options`
+                          : undefined;
+
+                      return (
+                        <div key={prop.key} style={{ marginBottom: '0.5rem' }}>
+                          <label
+                            htmlFor={inputId}
+                            style={{
+                              display: 'block',
+                              fontWeight: 500,
+                              marginBottom: '0.15rem',
+                            }}
+                          >
+                            {prop.label}
+                          </label>
+                          <input
+                            id={inputId}
+                            type="text"
+                            list={datalistId}
+                            value={inputValue}
+                            onChange={(e) => {
+                              const text = e.target.value;
+                              setCharacterMetadata((prev) => {
+                                const prevCategory =
+                                  (prev as any)[
+                                    category.key as keyof CharacterAppearanceMetadata
+                                  ] as Record<string, unknown> | undefined;
+                                const nextCategory: Record<string, unknown> = {
+                                  ...(prevCategory ?? {}),
+                                };
+
+                                if (prop.type === 'tags') {
+                                  const tokens = text
+                                    .split(',')
+                                    .map((token) => token.trim())
+                                    .filter((token) => token.length > 0);
+                                  if (tokens.length > 0) {
+                                    nextCategory[prop.key] = tokens;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                } else {
+                                  const nextValue =
+                                    text.trim().length > 0
+                                      ? text
+                                      : undefined;
+                                  if (nextValue) {
+                                    nextCategory[prop.key] = nextValue;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                }
+
+                                return {
+                                  ...prev,
+                                  [category.key]:
+                                    Object.keys(nextCategory).length > 0
+                                      ? nextCategory
+                                      : undefined,
+                                };
+                              });
+                            }}
+                            placeholder={
+                              prop.type === 'tags'
+                                ? 'Comma-separated values'
+                                : prop.options && prop.options.length > 0
+                                ? 'Select or type a value'
+                                : undefined
+                            }
+                            style={{ width: '100%', padding: '0.35rem' }}
+                          />
+                          {datalistId && prop.options && (
+                            <datalist id={datalistId}>
+                              {prop.options.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </datalist>
+                          )}
+                          {prop.description && (
+                            <div
+                              style={{
+                                fontSize: '0.8rem',
+                                color: '#666',
+                                marginTop: '0.1rem',
+                              }}
+                            >
+                              {prop.description}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+            </div>
             <div style={{ marginTop: '0.5rem' }}>
               <button
                 type="submit"
@@ -2006,99 +2199,10 @@ function App() {
             padding: '1rem',
             marginTop: '1.5rem',
           }}
-        >
+      >
           <h2 style={{ marginTop: 0 }}>Create style in {currentSpace.name}</h2>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!user || !selectedSpaceId) return;
-              setCreateDefinitionLoading(true);
-              (async () => {
-                try {
-                  const res = await fetch(
-                    `/api/spaces/${selectedSpaceId}/styles`,
-                    {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      credentials: 'include',
-                      body: JSON.stringify({
-                        name: newStyleName,
-                        description: newStyleDescription || null,
-                        metadata:
-                          newStyleRenderDomain || newStyleGenres
-                            ? {
-                                core_style: {
-                                  render_domain:
-                                    newStyleRenderDomain || undefined,
-                                  genre:
-                                    newStyleGenres
-                                      .split(',')
-                                      .map((token) => token.trim())
-                                      .filter(Boolean) || undefined,
-                                },
-                              }
-                            : null,
-                      }),
-                    },
-                  );
-
-                  const body = (await res.json().catch(() => null)) as
-                    | {
-                        style?: DefinitionSummary;
-                        error?: string;
-                      }
-                    | null;
-
-                  if (!res.ok) {
-                    const code = body?.error;
-                    if (code === 'NAME_REQUIRED') {
-                      // basic validation already enforced by required input
-                    } else if (code === 'UNAUTHENTICATED') {
-                      setUser(null);
-                      setSpaces([]);
-                      setSpaceCharacters([]);
-                      setSpaceScenes([]);
-                      setSpaceStyles([]);
-                    } else if (code === 'SPACE_NOT_FOUND') {
-                      // space no longer accessible
-                    } else {
-                      // eslint-disable-next-line no-console
-                      console.error('[styles] Create style error code:', code);
-                    }
-                    return;
-                  }
-
-                  if (body?.style) {
-                    setSpaceStyles((prev) => [
-                      body.style as DefinitionSummary,
-                      ...prev,
-                    ]);
-                    setNewStyleName('');
-                    setNewStyleDescription('');
-                    setNewStyleRenderDomain('');
-                    setNewStyleGenres('');
-
-                    if (selectedSpaceId) {
-                      navigateTo({ kind: 'space', spaceId: selectedSpaceId });
-                    }
-                  } else {
-                    // eslint-disable-next-line no-console
-                    console.error('Style was created but not returned.');
-                  }
-                } catch (err) {
-                  const message =
-                    err instanceof Error
-                      ? err.message
-                      : 'Failed to create style.';
-                  // eslint-disable-next-line no-console
-                  console.error('[styles] Create style error:', message);
-                } finally {
-                  setCreateDefinitionLoading(false);
-                }
-              })();
-            }}
+            onSubmit={(e) => void handleCreateStyleDefinition(e)}
             style={{
               marginTop: '0.5rem',
               display: 'grid',
@@ -2120,20 +2224,173 @@ function App() {
               rows={2}
               style={{ width: '100%', padding: '0.4rem' }}
             />
-            <input
-              type="text"
-              placeholder="Render domain (e.g. comic_illustration)"
-              value={newStyleRenderDomain}
-              onChange={(e) => setNewStyleRenderDomain(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Genres (comma-separated, e.g. sci_fi, fantasy)"
-              value={newStyleGenres}
-              onChange={(e) => setNewStyleGenres(e.target.value)}
-              style={{ width: '100%', padding: '0.4rem' }}
-            />
+            <div
+              style={{
+                marginTop: '0.5rem',
+                paddingTop: '0.5rem',
+                borderTop: '1px solid #eee',
+              }}
+            >
+              <h3 style={{ margin: '0 0 0.25rem' }}>Style configuration</h3>
+              <p
+                style={{
+                  margin: '0 0 0.5rem',
+                  fontSize: '0.85rem',
+                  color: '#555',
+                }}
+              >
+                Configure how this style behaves in terms of line, color, lighting,
+                rendering technique, composition, and mood.
+              </p>
+              {styleDefinitionConfig.categories
+                .slice()
+                .sort((a, b) => a.order - b.order)
+                .map((category) => (
+                  <div
+                    key={category.key}
+                    style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.5rem 0.25rem 0.25rem',
+                      borderTop: '1px solid #f0f0f0',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        marginBottom: '0.25rem',
+                      }}
+                    >
+                      {category.label}
+                    </div>
+                    {category.description && (
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: '#666',
+                          marginBottom: '0.25rem',
+                        }}
+                      >
+                        {category.description}
+                      </div>
+                    )}
+                    {category.properties.map((prop) => {
+                      const categoryValue =
+                        (styleMetadata as any)[
+                          category.key as keyof StyleDefinitionMetadata
+                        ] as Record<string, unknown> | undefined;
+                      const rawValue = categoryValue
+                        ? (categoryValue as any)[prop.key]
+                        : undefined;
+
+                      let inputValue = '';
+                      if (prop.type === 'tags') {
+                        inputValue = Array.isArray(rawValue)
+                          ? (rawValue as string[]).join(', ')
+                          : '';
+                      } else if (typeof rawValue === 'string') {
+                        inputValue = rawValue;
+                      }
+
+                      const inputId = `style-${category.key}-${prop.key}`;
+                      const datalistId =
+                        prop.options && prop.options.length > 0
+                          ? `${inputId}-options`
+                          : undefined;
+
+                      return (
+                        <div key={prop.key} style={{ marginBottom: '0.5rem' }}>
+                          <label
+                            htmlFor={inputId}
+                            style={{
+                              display: 'block',
+                              fontWeight: 500,
+                              marginBottom: '0.15rem',
+                            }}
+                          >
+                            {prop.label}
+                          </label>
+                          <input
+                            id={inputId}
+                            type="text"
+                            list={datalistId}
+                            value={inputValue}
+                            onChange={(e) => {
+                              const text = e.target.value;
+                              setStyleMetadata((prev) => {
+                                const prevCategory =
+                                  (prev as any)[
+                                    category.key as keyof StyleDefinitionMetadata
+                                  ] as Record<string, unknown> | undefined;
+                                const nextCategory: Record<string, unknown> = {
+                                  ...(prevCategory ?? {}),
+                                };
+
+                                if (prop.type === 'tags') {
+                                  const tokens = text
+                                    .split(',')
+                                    .map((token) => token.trim())
+                                    .filter((token) => token.length > 0);
+                                  if (tokens.length > 0) {
+                                    nextCategory[prop.key] = tokens;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                } else {
+                                  const nextValue =
+                                    text.trim().length > 0
+                                      ? text
+                                      : undefined;
+                                  if (nextValue) {
+                                    nextCategory[prop.key] = nextValue;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                }
+
+                                return {
+                                  ...prev,
+                                  [category.key]:
+                                    Object.keys(nextCategory).length > 0
+                                      ? nextCategory
+                                      : undefined,
+                                };
+                              });
+                            }}
+                            placeholder={
+                              prop.type === 'tags'
+                                ? 'Comma-separated values'
+                                : prop.options && prop.options.length > 0
+                                ? 'Select or type a value'
+                                : undefined
+                            }
+                            style={{ width: '100%', padding: '0.35rem' }}
+                          />
+                          {datalistId && prop.options && (
+                            <datalist id={datalistId}>
+                              {prop.options.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </datalist>
+                          )}
+                          {prop.description && (
+                            <div
+                              style={{
+                                fontSize: '0.8rem',
+                                color: '#666',
+                                marginTop: '0.1rem',
+                              }}
+                            >
+                              {prop.description}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+            </div>
             <div style={{ marginTop: '0.5rem' }}>
               <button
                 type="submit"

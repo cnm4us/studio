@@ -73,6 +73,8 @@ Treat this document as the TOC; detailed steps live in the individual `plan_nn.m
 - Plans:
   - `plan_04.md` – Definitions, lineage fields, and lifecycle states  
     - Status: Implemented in v1 form (unified `definitions` table with `root_id`/`parent_id`, simple `isCanonical`/`isLocked` flags; advanced lifecycle states still TODO, see `roadmap_v2.md`)
+  - `plan_13.md` – Full Character & Style Configuration (port from Graphics)  
+    - Status: In progress (server accepts full metadata; Space-level character/style create forms now expose multi-section config matching the legacy Graphics schemas)
 
 ---
 

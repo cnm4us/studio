@@ -1,0 +1,93 @@
+# Handoff 05 — Plan 13: Full Character & Style Configuration
+
+## 5.1 Thread Summary
+- Purpose: Execute Implementation Plan 13 to bring the detailed Character and Style configuration model from the legacy Graphics app into Studio.
+- Inherited context:
+  - `handoff_04.md` captured the state of cast-based rendering, per-task rendered assets, and the rendered asset modal.
+  - Definitions, Tasks, and RenderedAssets pipeline are already wired; characters/styles previously had only minimal metadata.
+- Current focus:
+  - Align Studio’s `CharacterAppearanceMetadata` / `StyleDefinitionMetadata` with the legacy Graphics schemas.
+  - Enhance Space-level character/style creation flows at `#/spaces/:id/characters/new` and `#/spaces/:id/styles/new` to capture rich, multi-section configuration used by the render pipeline.
+
+## 5.2 Implementation Notes
+- Server metadata types:
+  - `server/src/definition_metadata.ts`:
+    - Extended `CharacterAppearanceMetadata`:
+      - Added `base_reference_images` block with the four reference image ID fields used by the Graphics pipeline.
+      - Added index signatures on each category to tolerate additional keys from the legacy config.
+    - Extended `StyleDefinitionMetadata`:
+      - Added `influences` (core_style), `composition_notes` (composition_and_camera).
+      - Added index signatures on each category for forward compatibility with the Graphics JSON.
+- Client shared types + config:
+  - `client/src/definitionMetadata.ts`:
+    - Mirrored `CharacterAppearanceMetadata` and `StyleDefinitionMetadata` for client-side typing.
+  - Config directories (mirroring legacy Graphics structure):
+    - `client/src/config/characterAppearance/`:
+      - One file per category (`coreIdentity.ts`, `facialStructure.ts`, `hair.ts`, `skin.ts`, `physique.ts`, `distinctiveMarkers.ts`, `clothingDefaults.ts`, `characterLore.ts`, `baseReferenceImages.ts`).
+      - `index.ts` exports `characterAppearanceConfig` (ordered categories) plus the shared config types in `types.ts`.
+    - `client/src/config/styleDefinitions/`:
+      - One file per category (`coreStyle.ts`, `lineAndDetail.ts`, `colorAndLighting.ts`, `renderingTechnique.ts`, `compositionAndCamera.ts`, `moodAndAtmosphere.ts`).
+      - `index.ts` exports `styleDefinitionConfig` plus shared types in `types.ts`.
+    - These configs currently define category keys and property keys/types, with light descriptions and `allowCustom` flags; full option enumerations from the legacy site can be added incrementally.
+- Client character creation flow:
+  - `client/src/App.tsx`:
+    - Added `characterMetadata: CharacterAppearanceMetadata` state; removed the previous ad-hoc fields (`characterAgeRange`, `characterGenderIdentity`, etc.).
+    - `handleCreateDefinition(event, 'character')`:
+      - Now sends `metadata` built from `characterMetadata`, with `core_identity.name` always synced to the entered Character name.
+    - Character creation form (`isCreateCharacterRoute` block):
+      - Retains top-level `name` and `description`.
+      - Adds a “Character appearance” section that:
+        - Iterates over `characterAppearanceConfig.categories` (ordered by `order`).
+        - Renders an `<input>` per property:
+          - `type='text'` for scalar/string-like fields.
+          - Comma-separated input for `type='tags'`, stored as `string[]` in metadata.
+          - `datalist` suggestions when `options` are present.
+        - Skips `core_identity.name` (avoids duplicate input; top-level name drives it instead).
+- Client style creation flow:
+  - `client/src/App.tsx`:
+    - Added `styleMetadata: StyleDefinitionMetadata` state; removed `newStyleRenderDomain` and `newStyleGenres`.
+    - New `handleCreateStyleDefinition`:
+      - Posts to `/api/spaces/:spaceId/styles` with `name`, `description`, and full `styleMetadata` (or `null` when empty).
+      - On success, prepends the new style to `spaceStyles`, resets form + `styleMetadata`, and navigates back to the Space overview.
+    - Style creation form (`isCreateStyleRoute` block):
+      - Retains top-level `name` and `description`.
+      - Adds a “Style configuration” section that:
+        - Iterates over `styleDefinitionConfig.categories` and properties.
+        - Uses the same input strategy as characters (text inputs + comma-separated tags + `datalist` for suggested values).
+- Roadmap/documentation:
+  - `agents/implementation/roadmap.md`:
+    - Added `plan_13.md` under Phase 4 with status “In progress”, noting:
+      - Server now accepts full metadata.
+      - Space-level create forms expose multi-section config aligned with the legacy Graphics schemas.
+- Validation:
+  - `client`: `npm run build` (TS + Vite) — passes.
+  - `server`: `npm run build` — passes.
+
+## 5.3 Open Questions / Deferred Tasks
+- Editing definitions:
+  - Space-level and Project-level GET endpoints still return `PublicDefinition` without `metadata`; editing existing characters/styles via rich forms is out-of-scope for Plan 13 and would require API shape changes.
+- Config fidelity vs. legacy Graphics:
+  - Character appearance config currently mirrors category structure and key names, with partial option lists (full Graphics enums are not entirely ported).
+  - If strict parity with Graphics is required (all options, descriptions, and validation), we may want to:
+    - Copy the full config modules from the Graphics repo into Studio (or a shared package).
+    - Introduce stricter client-side validation based on those configs.
+- Base reference images behavior:
+  - The new `base_reference_images` fields are stored in metadata and included in prompt JSON, but there is no UI yet for uploading/selecting reference images in Studio or for enforcing consistent IDs.
+- Render pipeline verification:
+  - We have only static verification that richer metadata flows through:
+    - Definitions → `definitions.metadata` (via Space create endpoints).
+    - Definitions → `tasks_routes` prompt builder → `rendered_assets.metadata`.
+  - A future pass should perform a manual end-to-end test in the deployed Studio:
+    - Create full character + style via new forms.
+    - Import into Project, create a Task, render, and inspect `rendered_assets.metadata` and composed prompts.
+
+## 5.4 Suggestions for Next Threadself
+- If continuing Plan 13:
+  - Add read/edit support for metadata:
+    - Extend Space/Project definitions APIs (and `DefinitionSummary`) to include `metadata` payloads.
+    - Implement “Edit character/style” flows that reuse the new forms, pre-populated from existing metadata.
+  - Tighten alignment with Graphics configs:
+    - Port the full character appearance config (all enums/options) into Studio client config.
+    - Optionally surface key config hints in the Project cast UI (e.g., showing core_style render_domain, key personality tags).
+- If shifting toward clone/locking work:
+  - Keep Plan 13 as “foundation complete” for config surfaces and move to the clone/locking semantics in `roadmap_v2.md`, using the new metadata-rich characters/styles as test assets.

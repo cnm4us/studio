@@ -1,3 +1,7 @@
+// Shared metadata types for character and style definitions in the Studio client.
+// These mirror the server-side types in server/src/definition_metadata.ts,
+// plus lightweight config descriptors used to render creation forms.
+
 export type CharacterAppearanceMetadata = {
   core_identity?: {
     name?: string;
