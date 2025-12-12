@@ -7,6 +7,7 @@ import { attachUserFromToken, requireAuth } from './auth_routes.js';
 import {
   createRenderedAsset,
   createTask,
+  deleteTask,
   listProjectTasks,
   listRenderedAssetsByProject,
   getRenderedAssetById,
@@ -267,7 +268,57 @@ projectsRouter.get(
 
     try {
       const tasks = await listProjectTasks(project.id);
-      res.status(200).json({ tasks });
+      const db = getDbPool();
+
+      const [assetRows] = await db.query(
+        `SELECT task_id, state, COUNT(*) AS count
+         FROM rendered_assets
+         WHERE project_id = ?
+         GROUP BY task_id, state`,
+        [project.id],
+      );
+
+      const assetStats = new Map<
+        number,
+        { approved: number; draftOrRunning: number }
+      >();
+
+      (assetRows as Array<{ task_id: number; state: string; count: number }>).forEach(
+        (row) => {
+          const current = assetStats.get(row.task_id) ?? {
+            approved: 0,
+            draftOrRunning: 0,
+          };
+          if (row.state === 'approved') {
+            current.approved += Number(row.count) || 0;
+          } else if (row.state === 'draft') {
+            current.draftOrRunning += Number(row.count) || 0;
+          }
+          assetStats.set(row.task_id, current);
+        },
+      );
+
+      const projected = tasks.map((task) => {
+        const stats = assetStats.get(task.id) ?? {
+          approved: 0,
+          draftOrRunning: 0,
+        };
+
+        let status = task.status;
+        if (task.status === 'failed') {
+          status = 'failed';
+        } else if (stats.approved > 0) {
+          status = 'completed';
+        } else if (task.status === 'running' || stats.draftOrRunning > 0) {
+          status = 'running';
+        } else {
+          status = 'pending';
+        }
+
+        return { ...task, status };
+      });
+
+      res.status(200).json({ tasks: projected });
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('[tasks] List tasks error:', error);
@@ -330,6 +381,60 @@ renderedAssetsRouter.patch(
       console.error('[tasks] Update rendered asset state error:', error);
       res.status(500).json({ error: 'RENDERED_ASSET_UPDATE_FAILED' });
     }
+  },
+);
+
+// Task deletion — only allowed when no approved renders exist
+
+taskRenderRouter.delete(
+  '/',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'UNAUTHENTICATED' });
+      return;
+    }
+
+    const { taskId } = req.params as { taskId?: string };
+    const numericTaskId = taskId ? Number(taskId) : NaN;
+    if (!Number.isFinite(numericTaskId) || numericTaskId <= 0) {
+      res.status(400).json({ error: 'INVALID_TASK_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+
+    const [rows] = await db.query(
+      `SELECT t.id, t.project_id, p.space_id
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id
+       JOIN spaces s ON s.id = p.space_id
+       WHERE t.id = ? AND s.user_id = ?
+       LIMIT 1`,
+      [numericTaskId, user.id],
+    );
+    const list = rows as Array<{ id: number; project_id: number; space_id: number }>;
+    if (list.length === 0) {
+      res.status(404).json({ error: 'TASK_NOT_FOUND' });
+      return;
+    }
+
+    const [assetRows] = await db.query(
+      `SELECT COUNT(*) AS approvedCount
+       FROM rendered_assets
+       WHERE task_id = ? AND state = 'approved'`,
+      [numericTaskId],
+    );
+    const approvedCount =
+      (assetRows as Array<{ approvedCount: number }>)[0]?.approvedCount ?? 0;
+
+    if (approvedCount > 0) {
+      res.status(400).json({ error: 'TASK_HAS_APPROVED_RENDERS' });
+      return;
+    }
+
+    await deleteTask(numericTaskId);
+    res.status(204).send();
   },
 );
 
@@ -524,8 +629,6 @@ taskRenderRouter.post(
         uploadResult.url,
         metadata,
       );
-
-      await updateTaskStatus(task.id, 'completed');
 
       const [rows] = await db.query(
         'SELECT * FROM tasks WHERE id = ? LIMIT 1',

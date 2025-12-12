@@ -31,6 +31,7 @@ type ProjectViewProps = {
     assetId: number,
     state: 'draft' | 'approved' | 'archived',
   ) => void;
+  onDeleteTask: (taskId: number) => void;
   onImportDefinitionsToProject: (event: FormEvent) => void;
   onCreateTask: (event: FormEvent) => void;
   onRenderTask: (params: {
@@ -82,6 +83,7 @@ export function ProjectView(props: ProjectViewProps) {
     onImportSingleDefinition,
     onRemoveProjectDefinition,
     onUpdateRenderedAssetState,
+    onDeleteTask,
   } = props;
 
   const [selectedSpaceCharacterId, setSelectedSpaceCharacterId] = useState<
@@ -741,12 +743,82 @@ export function ProjectView(props: ProjectViewProps) {
                         </div>
                         <div
                           style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: '0.25rem',
                             fontSize: '0.85rem',
                             color: '#555',
                             textAlign: 'right',
                           }}
                         >
-                          Status: {task.status}
+                          <div>Status: {task.status}</div>
+                          {(() => {
+                            const hasApproved = renderedAssets.some(
+                              (asset) =>
+                                asset.task_id === task.id &&
+                                asset.state === 'approved',
+                            );
+                            if (hasApproved) {
+                              return null;
+                            }
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteTask(task.id)}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#b71c1c',
+                                  cursor: 'pointer',
+                                  fontSize: '0.9rem',
+                                  padding: 0,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.15rem',
+                                }}
+                                aria-label="Delete task (no approved renders)"
+                                title="Delete task (only allowed when there are no approved renders)"
+                              >
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '0.8rem',
+                                    height: '0.8rem',
+                                    borderRadius: '2px',
+                                    border: '1px solid currentColor',
+                                    position: 'relative',
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      position: 'absolute',
+                                      top: '50%',
+                                      left: '50%',
+                                      width: '70%',
+                                      height: '2px',
+                                      backgroundColor: 'currentColor',
+                                      transform:
+                                        'translate(-50%, -50%) rotate(45deg)',
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      position: 'absolute',
+                                      top: '50%',
+                                      left: '50%',
+                                      width: '70%',
+                                      height: '2px',
+                                      backgroundColor: 'currentColor',
+                                      transform:
+                                        'translate(-50%, -50%) rotate(-45deg)',
+                                    }}
+                                  />
+                                </span>
+                                <span>Delete</span>
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
 

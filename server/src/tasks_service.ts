@@ -112,6 +112,11 @@ export const updateTaskStatus = async (
   await db.query('UPDATE tasks SET status = ? WHERE id = ?', [status, taskId]);
 };
 
+export const deleteTask = async (taskId: number): Promise<void> => {
+  const db = getDbPool();
+  await db.query('DELETE FROM tasks WHERE id = ?', [taskId]);
+};
+
 export const createRenderedAsset = async (
   projectId: number,
   taskId: number,

@@ -1613,6 +1613,55 @@ function App() {
     }
   };
 
+  const handleDeleteTask = async (taskId: number): Promise<void> => {
+    if (!user) return;
+
+    setTasksError(null);
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (res.status === 204) {
+        setTasks((prev) => prev.filter((task) => task.id !== taskId));
+        setRenderedAssets((prev) =>
+          prev.filter((asset) => asset.task_id !== taskId),
+        );
+        return;
+      }
+
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      const code = body?.error;
+
+      if (code === 'UNAUTHENTICATED') {
+        setTasksError('You must be logged in to delete tasks.');
+        setUser(null);
+        setSpaces([]);
+        setProjects([]);
+        setTasks([]);
+        setRenderedAssets([]);
+      } else if (code === 'TASK_NOT_FOUND') {
+        setTasksError('Task not found or not owned by this user.');
+      } else if (code === 'TASK_HAS_APPROVED_RENDERS') {
+        setTasksError(
+          'Cannot delete this task because it has approved renders.',
+        );
+      } else if (code === 'INVALID_TASK_ID') {
+        setTasksError('The requested task id is invalid.');
+      } else {
+        setTasksError('Failed to delete task.');
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to delete task.';
+      setTasksError(message);
+    }
+  };
+
   return (
     <main
       style={{
@@ -1886,8 +1935,8 @@ function App() {
               />
             )}
 
-            {isProjectRoute && (
-              <ProjectView
+      {isProjectRoute && (
+        <ProjectView
                 importLoading={importLoading}
                 importError={importError}
                 projectDefinitionsLoading={projectDefinitionsLoading}
@@ -1911,15 +1960,16 @@ function App() {
                 renderError={renderError}
                 assetsLoading={assetsLoading}
                 assetsError={assetsError}
-                renderedAssets={renderedAssets}
-                onImportDefinitionsToProject={handleImportDefinitionsToProject}
-                onCreateTask={handleCreateTask}
-                onRenderTask={handleRenderTask}
-                onImportSingleDefinition={handleImportSingleDefinition}
-                onRemoveProjectDefinition={handleDeleteProjectDefinition}
-                onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
-              />
-            )}
+          renderedAssets={renderedAssets}
+          onImportDefinitionsToProject={handleImportDefinitionsToProject}
+          onCreateTask={handleCreateTask}
+          onRenderTask={handleRenderTask}
+          onImportSingleDefinition={handleImportSingleDefinition}
+          onRemoveProjectDefinition={handleDeleteProjectDefinition}
+          onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
+          onDeleteTask={handleDeleteTask}
+        />
+      )}
           </>
         )}
       </section>
