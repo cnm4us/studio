@@ -151,9 +151,10 @@ router.post('/scenes', async (req: AuthedRequest, res: Response) => {
     return;
   }
 
-  const { name, description } = req.body as {
+  const { name, description, metadata } = req.body as {
     name?: string;
     description?: string | null;
+    metadata?: unknown;
   };
 
   if (!name || name.trim().length === 0) {
@@ -167,6 +168,7 @@ router.post('/scenes', async (req: AuthedRequest, res: Response) => {
       'scene',
       name.trim(),
       description ?? null,
+      metadata ?? null,
     );
     res.status(201).json({ scene: definition });
   } catch (error: any) {

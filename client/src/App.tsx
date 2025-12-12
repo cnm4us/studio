@@ -6,10 +6,12 @@ import { ProjectView } from './views/ProjectView';
 import { SpaceView } from './views/SpaceView';
 import type {
   CharacterAppearanceMetadata,
+  SceneDefinitionMetadata,
   StyleDefinitionMetadata,
 } from './definitionMetadata';
 import { characterAppearanceConfig } from './config/characterAppearance';
 import { styleDefinitionConfig } from './config/styleDefinitions';
+import { sceneDefinitionConfig } from './config/sceneDefinitions';
 
 type PublicUser = {
   id: number;
@@ -71,6 +73,17 @@ type Route =
   | { kind: 'spaceNewCharacter'; spaceId: number }
   | { kind: 'spaceNewScene'; spaceId: number }
   | { kind: 'spaceNewStyle'; spaceId: number };
+
+type SceneCategoryValue = {
+  [propertyKey: string]:
+    | string
+    | string[]
+    | number
+    | boolean
+    | Array<unknown>
+    | null
+    | undefined;
+};
 
 const parseHashRoute = (): Route => {
   const hash = window.location.hash.replace(/^#/, '');
@@ -196,6 +209,8 @@ function App() {
   const [newStyleDescription, setNewStyleDescription] = useState('');
   const [styleMetadata, setStyleMetadata] =
     useState<StyleDefinitionMetadata>({});
+  const [sceneMetadata, setSceneMetadata] =
+    useState<SceneDefinitionMetadata>({});
 
   const [projectCharacters, setProjectCharacters] = useState<
     DefinitionSummary[]
@@ -929,15 +944,19 @@ function App() {
       ? newCharacterDescription
       : newSceneDescription;
 
-    const metadata: CharacterAppearanceMetadata | undefined = isCharacter
-      ? {
-          ...characterMetadata,
-          core_identity: {
-            ...(characterMetadata.core_identity ?? {}),
-            name,
-          },
-        }
-      : undefined;
+    let metadata: CharacterAppearanceMetadata | SceneDefinitionMetadata | null =
+      null;
+    if (isCharacter) {
+      metadata = {
+        ...characterMetadata,
+        core_identity: {
+          ...(characterMetadata.core_identity ?? {}),
+          name,
+        },
+      };
+    } else {
+      metadata = Object.keys(sceneMetadata).length > 0 ? sceneMetadata : null;
+    }
 
     try {
       const res = await fetch(
@@ -949,7 +968,7 @@ function App() {
           body: JSON.stringify({
             name,
             description: description || null,
-            metadata: metadata ?? null,
+            metadata,
           }),
         },
       );
@@ -985,6 +1004,7 @@ function App() {
         setSpaceScenes((prev) => [body.scene as DefinitionSummary, ...prev]);
         setNewSceneName('');
         setNewSceneDescription('');
+        setSceneMetadata({});
       } else {
         // eslint-disable-next-line no-console
         console.error('Definition was created but not returned.');
@@ -2015,10 +2035,6 @@ function App() {
                       }
 
                       const inputId = `character-${category.key}-${prop.key}`;
-                      const datalistId =
-                        prop.options && prop.options.length > 0
-                          ? `${inputId}-options`
-                          : undefined;
 
                       return (
                         <div key={prop.key} style={{ marginBottom: '0.5rem' }}>
@@ -2032,70 +2048,315 @@ function App() {
                           >
                             {prop.label}
                           </label>
-                          <input
-                            id={inputId}
-                            type="text"
-                            list={datalistId}
-                            value={inputValue}
-                            onChange={(e) => {
-                              const text = e.target.value;
-                              setCharacterMetadata((prev) => {
-                                const prevCategory =
-                                  (prev as any)[
-                                    category.key as keyof CharacterAppearanceMetadata
-                                  ] as Record<string, unknown> | undefined;
-                                const nextCategory: Record<string, unknown> = {
-                                  ...(prevCategory ?? {}),
-                                };
+                          {prop.type === 'tags' &&
+                            (() => {
+                              const categoryValueForTags =
+                                (characterMetadata as any)[
+                                  category.key as keyof CharacterAppearanceMetadata
+                                ] as Record<string, unknown> | undefined;
+                              const rawTags = categoryValueForTags
+                                ? (categoryValueForTags as any)[prop.key]
+                                : undefined;
+                              const selectedTags = Array.isArray(rawTags)
+                                ? (rawTags as string[])
+                                : [];
+                              const availableOptions =
+                                prop.options && prop.options.length > 0
+                                  ? prop.options.filter(
+                                      (opt) =>
+                                        !selectedTags.includes(opt.value),
+                                    )
+                                  : [];
+                              return (
+                                <>
+                                  {availableOptions.length > 0 && (
+                                    <div
+                                      style={{
+                                        margin: '0.25rem 0',
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.25rem',
+                                      }}
+                                    >
+                                      {availableOptions.map((opt) => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() =>
+                                            setCharacterMetadata((prev) => {
+                                              const prevCategory =
+                                                (prev as any)[
+                                                  category.key as keyof CharacterAppearanceMetadata
+                                                ] as
+                                                  | Record<string, unknown>
+                                                  | undefined;
+                                              const nextCategory: Record<
+                                                string,
+                                                unknown
+                                              > = {
+                                                ...(prevCategory ?? {}),
+                                              };
+                                              const current =
+                                                (nextCategory[
+                                                  prop.key
+                                                ] as string[] | undefined) ??
+                                                [];
+                                              if (
+                                                !current.includes(opt.value)
+                                              ) {
+                                                nextCategory[prop.key] = [
+                                                  ...current,
+                                                  opt.value,
+                                                ];
+                                              }
+                                              return {
+                                                ...prev,
+                                                [category.key]:
+                                                  Object.keys(nextCategory)
+                                                    .length > 0
+                                                    ? nextCategory
+                                                    : undefined,
+                                              };
+                                            })
+                                          }
+                                          style={{
+                                            borderRadius: '999px',
+                                            border: '1px solid #ccc',
+                                            padding: '0.15rem 0.5rem',
+                                            fontSize: '0.8rem',
+                                            backgroundColor: '#f7f7f7',
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {selectedTags.length > 0 && (
+                                    <div
+                                      style={{
+                                        margin: '0.15rem 0 0.25rem',
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.25rem',
+                                      }}
+                                    >
+                                      {selectedTags.map((tag) => {
+                                        const optionLabel =
+                                          prop.options?.find(
+                                            (opt) => opt.value === tag,
+                                          )?.label ?? tag;
+                                        return (
+                                          <span
+                                            key={tag}
+                                            style={{
+                                              borderRadius: '999px',
+                                              border: '1px solid #444',
+                                              padding: '0.1rem 0.4rem',
+                                              fontSize: '0.8rem',
+                                              backgroundColor: '#222',
+                                              color: '#fff',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '0.25rem',
+                                            }}
+                                          >
+                                            <span>{optionLabel}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setCharacterMetadata((prev) => {
+                                                  const prevCategory =
+                                                    (prev as any)[
+                                                      category.key as keyof CharacterAppearanceMetadata
+                                                    ] as
+                                                      | Record<
+                                                          string,
+                                                          unknown
+                                                        >
+                                                      | undefined;
+                                                  const nextCategory: Record<
+                                                    string,
+                                                    unknown
+                                                  > = {
+                                                    ...(prevCategory ?? {}),
+                                                  };
+                                                  const current =
+                                                    (nextCategory[
+                                                      prop.key
+                                                    ] as string[] | undefined) ??
+                                                    [];
+                                                  const next =
+                                                    current.filter(
+                                                      (value) =>
+                                                        value !== tag,
+                                                    );
+                                                  if (next.length > 0) {
+                                                    nextCategory[prop.key] =
+                                                      next;
+                                                  } else {
+                                                    delete nextCategory[
+                                                      prop.key
+                                                    ];
+                                                  }
+                                                  return {
+                                                    ...prev,
+                                                    [category.key]:
+                                                      Object.keys(
+                                                        nextCategory,
+                                                      ).length > 0
+                                                        ? nextCategory
+                                                        : undefined,
+                                                  };
+                                                })
+                                              }
+                                              style={{
+                                                border: 'none',
+                                                background: 'transparent',
+                                                color: '#fff',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                padding: 0,
+                                              }}
+                                            >
+                                              ×
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          {prop.type === 'enum' && prop.options && prop.options.length > 0 ? (
+                            <select
+                              id={inputId}
+                              value={inputValue}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setCharacterMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof CharacterAppearanceMetadata
+                                    ] as Record<string, unknown> | undefined;
+                                  const nextCategory: Record<string, unknown> = {
+                                    ...(prevCategory ?? {}),
+                                  };
 
-                                if (prop.type === 'tags') {
-                                  const tokens = text
-                                    .split(',')
-                                    .map((token) => token.trim())
-                                    .filter((token) => token.length > 0);
-                                  if (tokens.length > 0) {
-                                    nextCategory[prop.key] = tokens;
+                                  if (value) {
+                                    nextCategory[prop.key] = value;
                                   } else {
                                     delete nextCategory[prop.key];
                                   }
-                                } else {
-                                  const nextValue =
-                                    text.trim().length > 0
-                                      ? text
-                                      : undefined;
-                                  if (nextValue) {
-                                    nextCategory[prop.key] = nextValue;
-                                  } else {
-                                    delete nextCategory[prop.key];
-                                  }
-                                }
 
-                                return {
-                                  ...prev,
-                                  [category.key]:
-                                    Object.keys(nextCategory).length > 0
-                                      ? nextCategory
-                                      : undefined,
-                                };
-                              });
-                            }}
-                            placeholder={
-                              prop.type === 'tags'
-                                ? 'Comma-separated values'
-                                : prop.options && prop.options.length > 0
-                                ? 'Select or type a value'
-                                : undefined
-                            }
-                            style={{ width: '100%', padding: '0.35rem' }}
-                          />
-                          {datalistId && prop.options && (
-                            <datalist id={datalistId}>
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            >
+                              <option value="">Select (optional)</option>
                               {prop.options.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
                                   {opt.label}
                                 </option>
                               ))}
-                            </datalist>
+                            </select>
+                          ) : (
+                            <input
+                              id={inputId}
+                              type="text"
+                              value={prop.type === 'tags' ? undefined as any : inputValue}
+                              onChange={(e) => {
+                                const text = e.target.value;
+                                if (prop.type === 'tags') {
+                                  if (
+                                    !text.includes(' ') &&
+                                    !text.includes(',')
+                                  ) {
+                                    return;
+                                  }
+                                  const tokens = text
+                                    .split(/[, ]/)
+                                    .map((token) => token.trim())
+                                    .filter((token) => token.length > 0);
+                                  if (tokens.length === 0) {
+                                    e.target.value = '';
+                                    return;
+                                  }
+                                  setCharacterMetadata((prev) => {
+                                    const prevCategory =
+                                      (prev as any)[
+                                        category.key as keyof CharacterAppearanceMetadata
+                                      ] as Record<string, unknown> | undefined;
+                                    const nextCategory: Record<string, unknown> =
+                                      {
+                                        ...(prevCategory ?? {}),
+                                      };
+                                    const current =
+                                      (nextCategory[prop.key] as string[] | undefined) ??
+                                      [];
+                                    const merged = Array.from(
+                                      new Set([...current, ...tokens]),
+                                    );
+                                    if (merged.length > 0) {
+                                      nextCategory[prop.key] = merged;
+                                    } else {
+                                      delete nextCategory[prop.key];
+                                    }
+                                    return {
+                                      ...prev,
+                                      [category.key]:
+                                        Object.keys(nextCategory).length > 0
+                                          ? nextCategory
+                                          : undefined,
+                                    };
+                                  });
+                                  // Clear the input so typed text becomes pills.
+                                  e.target.value = '';
+                                } else {
+                                  setCharacterMetadata((prev) => {
+                                    const prevCategory =
+                                      (prev as any)[
+                                        category.key as keyof CharacterAppearanceMetadata
+                                      ] as Record<string, unknown> | undefined;
+                                    const nextCategory: Record<string, unknown> =
+                                      {
+                                        ...(prevCategory ?? {}),
+                                      };
+                                    const nextValue =
+                                      text.trim().length > 0
+                                        ? text
+                                        : undefined;
+                                    if (nextValue) {
+                                      nextCategory[prop.key] = nextValue;
+                                    } else {
+                                      delete nextCategory[prop.key];
+                                    }
+                                    return {
+                                      ...prev,
+                                      [category.key]:
+                                        Object.keys(nextCategory).length > 0
+                                          ? nextCategory
+                                          : undefined,
+                                    };
+                                  });
+                                }
+                              }}
+                              placeholder={
+                                prop.type === 'tags'
+                                  ? 'Type and press space or comma to add'
+                                  : undefined
+                              }
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            />
                           )}
                           {prop.description && (
                             <div
@@ -2169,6 +2430,451 @@ function App() {
               rows={3}
               style={{ width: '100%', padding: '0.4rem' }}
             />
+            <div
+              style={{
+                marginTop: '0.5rem',
+                paddingTop: '0.5rem',
+                borderTop: '1px solid #eee',
+              }}
+            >
+              <h3 style={{ margin: '0 0 0.25rem' }}>Scene configuration</h3>
+              <p
+                style={{
+                  margin: '0 0 0.5rem',
+                  fontSize: '0.85rem',
+                  color: '#555',
+                }}
+              >
+                Define the environment, layout, lighting, atmosphere, and narrative
+                role for this scene. These details flow into renders and help keep
+                panels consistent.
+              </p>
+              {sceneDefinitionConfig.categories
+                .slice()
+                .sort((a, b) => a.order - b.order)
+                .map((category) => (
+                  <div
+                    key={category.key}
+                    style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.5rem 0.25rem 0.25rem',
+                      borderTop: '1px solid #f0f0f0',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        marginBottom: '0.25rem',
+                      }}
+                    >
+                      {category.label}
+                    </div>
+                    {category.description && (
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: '#666',
+                          marginBottom: '0.25rem',
+                        }}
+                      >
+                        {category.description}
+                      </div>
+                    )}
+                    {category.properties.map((prop) => {
+                      const categoryValue =
+                        (sceneMetadata as any)[
+                          category.key as keyof SceneDefinitionMetadata
+                        ] as Record<string, unknown> | undefined;
+                      const rawValue = categoryValue
+                        ? (categoryValue as any)[prop.key]
+                        : undefined;
+
+                      let inputValue = '';
+                      if (prop.type === 'tags') {
+                        inputValue = Array.isArray(rawValue)
+                          ? (rawValue as string[]).join(', ')
+                          : '';
+                      } else if (
+                        prop.type === 'string' ||
+                        prop.type === 'enum'
+                      ) {
+                        if (typeof rawValue === 'string') {
+                          inputValue = rawValue;
+                        }
+                      } else if (prop.type === 'number') {
+                        if (typeof rawValue === 'number') {
+                          inputValue = String(rawValue);
+                        }
+                      }
+
+                      const inputId = `scene-${category.key}-${prop.key}`;
+
+                      return (
+                        <div key={prop.key} style={{ marginBottom: '0.5rem' }}>
+                          <label
+                            htmlFor={inputId}
+                            style={{
+                              display: 'block',
+                              fontWeight: 500,
+                              marginBottom: '0.15rem',
+                            }}
+                          >
+                            {prop.label}
+                          </label>
+                          {prop.type === 'tags' &&
+                            (() => {
+                              const categoryValueForTags =
+                                (sceneMetadata as any)[
+                                  category.key as keyof SceneDefinitionMetadata
+                                ] as Record<string, unknown> | undefined;
+                              const rawTags = categoryValueForTags
+                                ? (categoryValueForTags as any)[prop.key]
+                                : undefined;
+                              const selectedTags = Array.isArray(rawTags)
+                                ? (rawTags as string[])
+                                : [];
+                              const availableOptions =
+                                prop.options && prop.options.length > 0
+                                  ? prop.options.filter(
+                                      (opt) =>
+                                        !selectedTags.includes(opt.value),
+                                    )
+                                  : [];
+                              return (
+                                <>
+                                  {availableOptions.length > 0 && (
+                                    <div
+                                      style={{
+                                        margin: '0.25rem 0',
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.25rem',
+                                      }}
+                                    >
+                                      {availableOptions.map((opt) => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() =>
+                                            setSceneMetadata((prev) => {
+                                              const prevCategory =
+                                                (prev as any)[
+                                                  category.key as keyof SceneDefinitionMetadata
+                                                ] as SceneCategoryValue | undefined;
+                                              const nextCategory: SceneCategoryValue = {
+                                                ...(prevCategory ?? {}),
+                                              };
+                                              const current =
+                                                (nextCategory[
+                                                  prop.key
+                                                ] as string[] | undefined) ??
+                                                [];
+                                              if (
+                                                !current.includes(opt.value)
+                                              ) {
+                                                nextCategory[prop.key] = [
+                                                  ...current,
+                                                  opt.value,
+                                                ];
+                                              }
+                                              return {
+                                                ...prev,
+                                                [category.key]:
+                                                  Object.keys(nextCategory)
+                                                    .length > 0
+                                                    ? nextCategory
+                                                    : undefined,
+                                              };
+                                            })
+                                          }
+                                          style={{
+                                            borderRadius: '999px',
+                                            border: '1px solid #ccc',
+                                            padding: '0.15rem 0.5rem',
+                                            fontSize: '0.8rem',
+                                            backgroundColor: '#f7f7f7',
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {selectedTags.length > 0 && (
+                                    <div
+                                      style={{
+                                        margin: '0.15rem 0 0.25rem',
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.25rem',
+                                      }}
+                                    >
+                                      {selectedTags.map((tag) => {
+                                        const optionLabel =
+                                          prop.options?.find(
+                                            (opt) => opt.value === tag,
+                                          )?.label ?? tag;
+                                        return (
+                                          <span
+                                            key={tag}
+                                            style={{
+                                              borderRadius: '999px',
+                                              border: '1px solid #444',
+                                              padding: '0.1rem 0.4rem',
+                                              fontSize: '0.8rem',
+                                              backgroundColor: '#222',
+                                              color: '#fff',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '0.25rem',
+                                            }}
+                                          >
+                                            <span>{optionLabel}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setSceneMetadata((prev) => {
+                                                  const prevCategory =
+                                                    (prev as any)[
+                                                      category.key as keyof SceneDefinitionMetadata
+                                                    ] as SceneCategoryValue | undefined;
+                                                  const nextCategory: SceneCategoryValue = {
+                                                    ...(prevCategory ?? {}),
+                                                  };
+                                                  const current =
+                                                    (nextCategory[
+                                                      prop.key
+                                                    ] as string[] | undefined) ??
+                                                    [];
+                                                  const next =
+                                                    current.filter(
+                                                      (value) =>
+                                                        value !== tag,
+                                                    );
+                                                  if (next.length > 0) {
+                                                    nextCategory[prop.key] =
+                                                      next;
+                                                  } else {
+                                                    delete nextCategory[
+                                                      prop.key
+                                                    ];
+                                                  }
+                                                  return {
+                                                    ...prev,
+                                                    [category.key]:
+                                                      Object.keys(
+                                                        nextCategory,
+                                                      ).length > 0
+                                                        ? nextCategory
+                                                        : undefined,
+                                                  };
+                                                })
+                                              }
+                                              style={{
+                                                border: 'none',
+                                                background: 'transparent',
+                                                color: '#fff',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                padding: 0,
+                                              }}
+                                            >
+                                              ×
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          {prop.type === 'enum' && prop.options && prop.options.length > 0 ? (
+                            <select
+                              id={inputId}
+                              value={inputValue}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSceneMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof SceneDefinitionMetadata
+                                    ] as SceneCategoryValue | undefined;
+                                  const nextCategory: SceneCategoryValue = {
+                                    ...(prevCategory ?? {}),
+                                  };
+
+                                  if (value) {
+                                    nextCategory[prop.key] = value;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            >
+                              <option value="">Select (optional)</option>
+                              {prop.options.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : prop.type === 'number' ? (
+                            <input
+                              id={inputId}
+                              type="number"
+                              value={inputValue}
+                              min={prop.min}
+                              max={prop.max}
+                              step={prop.step}
+                              onChange={(e) => {
+                                const text = e.target.value;
+                                setSceneMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof SceneDefinitionMetadata
+                                    ] as SceneCategoryValue | undefined;
+                                  const nextCategory: SceneCategoryValue = {
+                                    ...(prevCategory ?? {}),
+                                  };
+                                  const parsed =
+                                    text.trim().length === 0
+                                      ? NaN
+                                      : Number(text);
+                                  if (!Number.isNaN(parsed)) {
+                                    nextCategory[prop.key] = parsed;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            />
+                          ) : prop.type === 'boolean' ? (
+                            <input
+                              id={inputId}
+                              type="checkbox"
+                              checked={rawValue === true}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSceneMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof SceneDefinitionMetadata
+                                    ] as SceneCategoryValue | undefined;
+                                  const nextCategory: SceneCategoryValue = {
+                                    ...(prevCategory ?? {}),
+                                  };
+                                  if (checked) {
+                                    nextCategory[prop.key] = true;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                            />
+                          ) : prop.type === 'list' ? (
+                            <textarea
+                              id={inputId}
+                              value={
+                                Array.isArray(rawValue)
+                                  ? (rawValue as string[]).join('\n')
+                                  : ''
+                              }
+                              onChange={(e) => {
+                                const text = e.target.value;
+                                const lines = text
+                                  .split('\n')
+                                  .map((line) => line.trim())
+                                  .filter((line) => line.length > 0);
+                                setSceneMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof SceneDefinitionMetadata
+                                    ] as SceneCategoryValue | undefined;
+                                  const nextCategory: SceneCategoryValue = {
+                                    ...(prevCategory ?? {}),
+                                  };
+                                  if (lines.length > 0) {
+                                    nextCategory[prop.key] = lines;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            />
+                          ) : (
+                            <input
+                              id={inputId}
+                              type="text"
+                              value={inputValue}
+                              onChange={(e) => {
+                                const text = e.target.value;
+                                setSceneMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof SceneDefinitionMetadata
+                                    ] as SceneCategoryValue | undefined;
+                                  const nextCategory: SceneCategoryValue = {
+                                    ...(prevCategory ?? {}),
+                                  };
+                                  const nextValue =
+                                    text.trim().length > 0 ? text : undefined;
+                                  if (nextValue) {
+                                    nextCategory[prop.key] = nextValue;
+                                  } else {
+                                    delete nextCategory[prop.key];
+                                  }
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+            </div>
             <div style={{ marginTop: '0.5rem' }}>
               <button
                 type="submit"
@@ -2292,10 +2998,6 @@ function App() {
                       }
 
                       const inputId = `style-${category.key}-${prop.key}`;
-                      const datalistId =
-                        prop.options && prop.options.length > 0
-                          ? `${inputId}-options`
-                          : undefined;
 
                       return (
                         <div key={prop.key} style={{ marginBottom: '0.5rem' }}>
@@ -2309,70 +3011,314 @@ function App() {
                           >
                             {prop.label}
                           </label>
-                          <input
-                            id={inputId}
-                            type="text"
-                            list={datalistId}
-                            value={inputValue}
-                            onChange={(e) => {
-                              const text = e.target.value;
-                              setStyleMetadata((prev) => {
-                                const prevCategory =
-                                  (prev as any)[
-                                    category.key as keyof StyleDefinitionMetadata
-                                  ] as Record<string, unknown> | undefined;
-                                const nextCategory: Record<string, unknown> = {
-                                  ...(prevCategory ?? {}),
-                                };
+                          {prop.type === 'tags' &&
+                            (() => {
+                              const categoryValueForTags =
+                                (styleMetadata as any)[
+                                  category.key as keyof StyleDefinitionMetadata
+                                ] as Record<string, unknown> | undefined;
+                              const rawTags = categoryValueForTags
+                                ? (categoryValueForTags as any)[prop.key]
+                                : undefined;
+                              const selectedTags = Array.isArray(rawTags)
+                                ? (rawTags as string[])
+                                : [];
+                              const availableOptions =
+                                prop.options && prop.options.length > 0
+                                  ? prop.options.filter(
+                                      (opt) =>
+                                        !selectedTags.includes(opt.value),
+                                    )
+                                  : [];
+                              return (
+                                <>
+                                  {availableOptions.length > 0 && (
+                                    <div
+                                      style={{
+                                        margin: '0.25rem 0',
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.25rem',
+                                      }}
+                                    >
+                                      {availableOptions.map((opt) => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() =>
+                                            setStyleMetadata((prev) => {
+                                              const prevCategory =
+                                                (prev as any)[
+                                                  category.key as keyof StyleDefinitionMetadata
+                                                ] as
+                                                  | Record<string, unknown>
+                                                  | undefined;
+                                              const nextCategory: Record<
+                                                string,
+                                                unknown
+                                              > = {
+                                                ...(prevCategory ?? {}),
+                                              };
+                                              const current =
+                                                (nextCategory[
+                                                  prop.key
+                                                ] as string[] | undefined) ??
+                                                [];
+                                              if (
+                                                !current.includes(opt.value)
+                                              ) {
+                                                nextCategory[prop.key] = [
+                                                  ...current,
+                                                  opt.value,
+                                                ];
+                                              }
+                                              return {
+                                                ...prev,
+                                                [category.key]:
+                                                  Object.keys(nextCategory)
+                                                    .length > 0
+                                                    ? nextCategory
+                                                    : undefined,
+                                              };
+                                            })
+                                          }
+                                          style={{
+                                            borderRadius: '999px',
+                                            border: '1px solid #ccc',
+                                            padding: '0.15rem 0.5rem',
+                                            fontSize: '0.8rem',
+                                            backgroundColor: '#f7f7f7',
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {selectedTags.length > 0 && (
+                                    <div
+                                      style={{
+                                        margin: '0.15rem 0 0.25rem',
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: '0.25rem',
+                                      }}
+                                    >
+                                      {selectedTags.map((tag) => {
+                                        const optionLabel =
+                                          prop.options?.find(
+                                            (opt) => opt.value === tag,
+                                          )?.label ?? tag;
+                                        return (
+                                          <span
+                                            key={tag}
+                                            style={{
+                                              borderRadius: '999px',
+                                              border: '1px solid #444',
+                                              padding: '0.1rem 0.4rem',
+                                              fontSize: '0.8rem',
+                                              backgroundColor: '#222',
+                                              color: '#fff',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '0.25rem',
+                                            }}
+                                          >
+                                            <span>{optionLabel}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setStyleMetadata((prev) => {
+                                                  const prevCategory =
+                                                    (prev as any)[
+                                                      category.key as keyof StyleDefinitionMetadata
+                                                    ] as
+                                                      | Record<
+                                                          string,
+                                                          unknown
+                                                        >
+                                                      | undefined;
+                                                  const nextCategory: Record<
+                                                    string,
+                                                    unknown
+                                                  > = {
+                                                    ...(prevCategory ?? {}),
+                                                  };
+                                                  const current =
+                                                    (nextCategory[
+                                                      prop.key
+                                                    ] as string[] | undefined) ??
+                                                    [];
+                                                  const next =
+                                                    current.filter(
+                                                      (value) =>
+                                                        value !== tag,
+                                                    );
+                                                  if (next.length > 0) {
+                                                    nextCategory[prop.key] =
+                                                      next;
+                                                  } else {
+                                                    delete nextCategory[
+                                                      prop.key
+                                                    ];
+                                                  }
+                                                  return {
+                                                    ...prev,
+                                                    [category.key]:
+                                                      Object.keys(
+                                                        nextCategory,
+                                                      ).length > 0
+                                                        ? nextCategory
+                                                        : undefined,
+                                                  };
+                                                })
+                                              }
+                                              style={{
+                                                border: 'none',
+                                                background: 'transparent',
+                                                color: '#fff',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                padding: 0,
+                                              }}
+                                            >
+                                              ×
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          {prop.type === 'enum' && prop.options && prop.options.length > 0 ? (
+                            <select
+                              id={inputId}
+                              value={inputValue}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setStyleMetadata((prev) => {
+                                  const prevCategory =
+                                    (prev as any)[
+                                      category.key as keyof StyleDefinitionMetadata
+                                    ] as Record<string, unknown> | undefined;
+                                  const nextCategory: Record<string, unknown> = {
+                                    ...(prevCategory ?? {}),
+                                  };
 
-                                if (prop.type === 'tags') {
-                                  const tokens = text
-                                    .split(',')
-                                    .map((token) => token.trim())
-                                    .filter((token) => token.length > 0);
-                                  if (tokens.length > 0) {
-                                    nextCategory[prop.key] = tokens;
+                                  if (value) {
+                                    nextCategory[prop.key] = value;
                                   } else {
                                     delete nextCategory[prop.key];
                                   }
-                                } else {
-                                  const nextValue =
-                                    text.trim().length > 0
-                                      ? text
-                                      : undefined;
-                                  if (nextValue) {
-                                    nextCategory[prop.key] = nextValue;
-                                  } else {
-                                    delete nextCategory[prop.key];
-                                  }
-                                }
 
-                                return {
-                                  ...prev,
-                                  [category.key]:
-                                    Object.keys(nextCategory).length > 0
-                                      ? nextCategory
-                                      : undefined,
-                                };
-                              });
-                            }}
-                            placeholder={
-                              prop.type === 'tags'
-                                ? 'Comma-separated values'
-                                : prop.options && prop.options.length > 0
-                                ? 'Select or type a value'
-                                : undefined
-                            }
-                            style={{ width: '100%', padding: '0.35rem' }}
-                          />
-                          {datalistId && prop.options && (
-                            <datalist id={datalistId}>
+                                  return {
+                                    ...prev,
+                                    [category.key]:
+                                      Object.keys(nextCategory).length > 0
+                                        ? nextCategory
+                                        : undefined,
+                                  };
+                                });
+                              }}
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            >
+                              <option value="">Select (optional)</option>
                               {prop.options.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
                                   {opt.label}
                                 </option>
                               ))}
-                            </datalist>
+                            </select>
+                          ) : (
+                            <input
+                              id={inputId}
+                              type="text"
+                              value={prop.type === 'tags' ? undefined as any : inputValue}
+                              onChange={(e) => {
+                                const text = e.target.value;
+                                if (prop.type === 'tags') {
+                                  if (
+                                    !text.includes(' ') &&
+                                    !text.includes(',')
+                                  ) {
+                                    return;
+                                  }
+                                  const tokens = text
+                                    .split(/[, ]/)
+                                    .map((token) => token.trim())
+                                    .filter((token) => token.length > 0);
+                                  if (tokens.length === 0) {
+                                    e.target.value = '';
+                                    return;
+                                  }
+                                  setStyleMetadata((prev) => {
+                                    const prevCategory =
+                                      (prev as any)[
+                                        category.key as keyof StyleDefinitionMetadata
+                                      ] as Record<string, unknown> | undefined;
+                                    const nextCategory: Record<string, unknown> =
+                                      {
+                                        ...(prevCategory ?? {}),
+                                      };
+                                    const current =
+                                      (nextCategory[prop.key] as string[] | undefined) ??
+                                      [];
+                                    const merged = Array.from(
+                                      new Set([...current, ...tokens]),
+                                    );
+                                    if (merged.length > 0) {
+                                      nextCategory[prop.key] = merged;
+                                    } else {
+                                      delete nextCategory[prop.key];
+                                    }
+                                    return {
+                                      ...prev,
+                                      [category.key]:
+                                        Object.keys(nextCategory).length > 0
+                                          ? nextCategory
+                                          : undefined,
+                                    };
+                                  });
+                                  e.target.value = '';
+                                } else {
+                                  setStyleMetadata((prev) => {
+                                    const prevCategory =
+                                      (prev as any)[
+                                        category.key as keyof StyleDefinitionMetadata
+                                      ] as Record<string, unknown> | undefined;
+                                    const nextCategory: Record<string, unknown> =
+                                      {
+                                        ...(prevCategory ?? {}),
+                                      };
+                                    const nextValue =
+                                      text.trim().length > 0
+                                        ? text
+                                        : undefined;
+                                    if (nextValue) {
+                                      nextCategory[prop.key] = nextValue;
+                                    } else {
+                                      delete nextCategory[prop.key];
+                                    }
+                                    return {
+                                      ...prev,
+                                      [category.key]:
+                                        Object.keys(nextCategory).length > 0
+                                          ? nextCategory
+                                          : undefined,
+                                    };
+                                  });
+                                }
+                              }}
+                              placeholder={
+                                prop.type === 'tags'
+                                  ? 'Type and press space or comma to add'
+                                  : undefined
+                              }
+                              style={{ width: '100%', padding: '0.35rem' }}
+                            />
                           )}
                           {prop.description && (
                             <div

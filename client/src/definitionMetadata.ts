@@ -120,3 +120,21 @@ export type StyleDefinitionMetadata = {
     [key: string]: string | string[] | undefined;
   };
 };
+
+// Generic scene metadata: categories keyed by category key, each containing
+// property keys mapped to primitive or structured values. This mirrors how
+// sceneDefinitionConfig is organized without over-constraining shape.
+export type SceneDefinitionMetadata = {
+  [categoryKey: string]:
+    | {
+        [propertyKey: string]:
+          | string
+          | string[]
+          | number
+          | boolean
+          | Array<unknown>
+          | null
+          | undefined;
+      }
+    | undefined;
+};
