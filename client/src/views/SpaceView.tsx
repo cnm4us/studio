@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react';
+import { useState } from 'react';
 import type { DefinitionSummary, ProjectSummary } from '../App';
 
 type SpaceViewProps = {
@@ -25,7 +26,11 @@ type SpaceViewProps = {
   onCreateScene: () => void;
   onCreateStyle: () => void;
   onDeleteDefinition: (
-    kind: 'character' | 'scene',
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ) => void;
+  onEditDefinition: (
+    kind: 'character' | 'scene' | 'style',
     definitionId: number,
   ) => void;
 };
@@ -55,7 +60,15 @@ export function SpaceView(props: SpaceViewProps) {
     onCreateScene,
     onCreateStyle,
     onDeleteDefinition,
+    onEditDefinition,
   } = props;
+
+  const [editing, setEditing] = useState<{
+    kind: 'character' | 'scene' | 'style';
+    id: number;
+    name: string;
+    description: string | null;
+  } | null>(null);
 
   return (
     <div
@@ -197,14 +210,18 @@ export function SpaceView(props: SpaceViewProps) {
         {!definitionsLoading &&
           !definitionsError &&
           spaceCharacters.length === 0 &&
-          spaceScenes.length === 0 && (
+          spaceScenes.length === 0 &&
+          spaceStyles.length === 0 && (
             <p>
-              No characters or scenes yet in this space. Create some above.
+              No characters, scenes, or styles yet in this space. Create some
+              above.
             </p>
           )}
 
         {!definitionsLoading &&
-          (spaceCharacters.length > 0 || spaceScenes.length > 0) && (
+          (spaceCharacters.length > 0 ||
+            spaceScenes.length > 0 ||
+            spaceStyles.length > 0) && (
             <div
               style={{
                 display: 'grid',
@@ -222,65 +239,152 @@ export function SpaceView(props: SpaceViewProps) {
                     marginTop: '0.5rem',
                   }}
                 >
-                  {spaceCharacters.map((c) => (
-                    <li
-                      key={c.id}
-                      style={{
-                        padding: '0.4rem 0',
-                        borderBottom: '1px solid #eee',
-                      }}
-                    >
-                      <div
+                  {spaceCharacters.map((c) => {
+                    const isEditing =
+                      editing?.kind === 'character' && editing.id === c.id;
+                    const currentName =
+                      isEditing && editing ? editing.name : c.name;
+                    const currentDescription =
+                      isEditing && editing
+                        ? editing.description ?? ''
+                        : c.description ?? '';
+
+                    return (
+                      <li
+                        key={c.id}
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: '0.75rem',
+                          padding: '0.4rem 0',
+                          borderBottom: '1px solid #eee',
                         }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{c.name}</div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                          }}
+                        >
+                          <div>
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={currentName}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !== 'character' ||
+                                        prev.id !== c.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        name: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    marginBottom: '0.25rem',
+                                  }}
+                                />
+                                <textarea
+                                  value={currentDescription}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !== 'character' ||
+                                        prev.id !== c.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        description: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  rows={2}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    fontSize: '0.85rem',
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontWeight: 600 }}>{c.name}</div>
+                                <div
+                                  style={{
+                                    fontSize: '0.8rem',
+                                    color: '#777',
+                                  }}
+                                >
+                                  {c.isCanonical ? 'Canonical' : 'Draft'}
+                                  {c.isLocked ? ' · Locked' : ''}
+                                </div>
+                                {c.description && (
+                                  <div
+                                    style={{
+                                      fontSize: '0.85rem',
+                                      color: '#555',
+                                    }}
+                                  >
+                                    {c.description}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                           <div
                             style={{
-                              fontSize: '0.8rem',
-                              color: '#777',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.25rem',
+                              alignItems: 'flex-end',
                             }}
                           >
-                            {c.isCanonical ? 'Canonical' : 'Draft'}
-                            {c.isLocked ? ' · Locked' : ''}
+                            <>
+                              {!c.isLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                      onEditDefinition('character', c.id)
+                                    }
+                                    style={{ fontSize: '0.8rem' }}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onDeleteDefinition('character', c.id)
+                                  }
+                                  disabled={
+                                    deleteDefinitionLoadingId === c.id ||
+                                    c.isLocked
+                                  }
+                                  style={{
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  {deleteDefinitionLoadingId === c.id
+                                    ? 'Deleting…'
+                                    : 'Delete'}
+                                </button>
+                            </>
                           </div>
-                          {c.description && (
-                            <div
-                              style={{
-                                fontSize: '0.85rem',
-                                color: '#555',
-                              }}
-                            >
-                              {c.description}
-                            </div>
-                          )}
                         </div>
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onDeleteDefinition('character', c.id)
-                            }
-                            disabled={
-                              deleteDefinitionLoadingId === c.id || c.isLocked
-                            }
-                            style={{
-                              fontSize: '0.8rem',
-                            }}
-                          >
-                            {deleteDefinitionLoadingId === c.id
-                              ? 'Deleting…'
-                              : 'Delete'}
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
               <div>
@@ -292,65 +396,152 @@ export function SpaceView(props: SpaceViewProps) {
                     marginTop: '0.5rem',
                   }}
                 >
-                  {spaceScenes.map((s) => (
-                    <li
-                      key={s.id}
-                      style={{
-                        padding: '0.4rem 0',
-                        borderBottom: '1px solid #eee',
-                      }}
-                    >
-                      <div
+                  {spaceScenes.map((s) => {
+                    const isEditing =
+                      editing?.kind === 'scene' && editing.id === s.id;
+                    const currentName =
+                      isEditing && editing ? editing.name : s.name;
+                    const currentDescription =
+                      isEditing && editing
+                        ? editing.description ?? ''
+                        : s.description ?? '';
+
+                    return (
+                      <li
+                        key={s.id}
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: '0.75rem',
+                          padding: '0.4rem 0',
+                          borderBottom: '1px solid #eee',
                         }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{s.name}</div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                          }}
+                        >
+                          <div>
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={currentName}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !== 'scene' ||
+                                        prev.id !== s.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        name: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    marginBottom: '0.25rem',
+                                  }}
+                                />
+                                <textarea
+                                  value={currentDescription}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !== 'scene' ||
+                                        prev.id !== s.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        description: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  rows={2}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    fontSize: '0.85rem',
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontWeight: 600 }}>{s.name}</div>
+                                <div
+                                  style={{
+                                    fontSize: '0.8rem',
+                                    color: '#777',
+                                  }}
+                                >
+                                  {s.isCanonical ? 'Canonical' : 'Draft'}
+                                  {s.isLocked ? ' · Locked' : ''}
+                                </div>
+                                {s.description && (
+                                  <div
+                                    style={{
+                                      fontSize: '0.85rem',
+                                      color: '#555',
+                                    }}
+                                  >
+                                    {s.description}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                           <div
                             style={{
-                              fontSize: '0.8rem',
-                              color: '#777',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.25rem',
+                              alignItems: 'flex-end',
                             }}
                           >
-                            {s.isCanonical ? 'Canonical' : 'Draft'}
-                            {s.isLocked ? ' · Locked' : ''}
+                            <>
+                              {!s.isLocked && (
+                                <button
+                                  type="button"
+                                    onClick={() =>
+                                      onEditDefinition('scene', s.id)
+                                    }
+                                    style={{ fontSize: '0.8rem' }}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onDeleteDefinition('scene', s.id)
+                                  }
+                                  disabled={
+                                    deleteDefinitionLoadingId === s.id ||
+                                    s.isLocked
+                                  }
+                                  style={{
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  {deleteDefinitionLoadingId === s.id
+                                    ? 'Deleting…'
+                                    : 'Delete'}
+                                </button>
+                            </>
                           </div>
-                          {s.description && (
-                            <div
-                              style={{
-                                fontSize: '0.85rem',
-                                color: '#555',
-                              }}
-                            >
-                              {s.description}
-                            </div>
-                          )}
                         </div>
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onDeleteDefinition('scene', s.id)
-                            }
-                            disabled={
-                              deleteDefinitionLoadingId === s.id || s.isLocked
-                            }
-                            style={{
-                              fontSize: '0.8rem',
-                            }}
-                          >
-                            {deleteDefinitionLoadingId === s.id
-                              ? 'Deleting…'
-                              : 'Delete'}
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
               <div>
@@ -362,36 +553,154 @@ export function SpaceView(props: SpaceViewProps) {
                     marginTop: '0.5rem',
                   }}
                 >
-                  {spaceStyles.map((style) => (
-                    <li
-                      key={style.id}
-                      style={{
-                        padding: '0.4rem 0',
-                        borderBottom: '1px solid #eee',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{style.name}</div>
-                      <div
+                  {spaceStyles.map((style) => {
+                    const isEditing =
+                      editing?.kind === 'style' && editing.id === style.id;
+                    const currentName =
+                      isEditing && editing ? editing.name : style.name;
+                    const currentDescription =
+                      isEditing && editing
+                        ? editing.description ?? ''
+                        : style.description ?? '';
+
+                    return (
+                      <li
+                        key={style.id}
                         style={{
-                          fontSize: '0.8rem',
-                          color: '#777',
+                          padding: '0.4rem 0',
+                          borderBottom: '1px solid #eee',
                         }}
                       >
-                        {style.isCanonical ? 'Canonical' : 'Draft'}
-                        {style.isLocked ? ' · Locked' : ''}
-                      </div>
-                      {style.description && (
                         <div
                           style={{
-                            fontSize: '0.85rem',
-                            color: '#555',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
                           }}
                         >
-                          {style.description}
+                          <div>
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={currentName}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !== 'style' ||
+                                        prev.id !== style.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        name: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    marginBottom: '0.25rem',
+                                  }}
+                                />
+                                <textarea
+                                  value={currentDescription}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !== 'style' ||
+                                        prev.id !== style.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        description: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  rows={2}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    fontSize: '0.85rem',
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontWeight: 600 }}>
+                                  {style.name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: '0.8rem',
+                                    color: '#777',
+                                  }}
+                                >
+                                  {style.isCanonical ? 'Canonical' : 'Draft'}
+                                  {style.isLocked ? ' · Locked' : ''}
+                                </div>
+                                {style.description && (
+                                  <div
+                                    style={{
+                                      fontSize: '0.85rem',
+                                      color: '#555',
+                                    }}
+                                  >
+                                    {style.description}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.25rem',
+                              alignItems: 'flex-end',
+                            }}
+                          >
+                            <>
+                              {!style.isLocked && (
+                                <button
+                                  type="button"
+                                    onClick={() =>
+                                      onEditDefinition('style', style.id)
+                                    }
+                                    style={{ fontSize: '0.8rem' }}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onDeleteDefinition('style', style.id)
+                                  }
+                                  disabled={
+                                    deleteDefinitionLoadingId === style.id ||
+                                    style.isLocked
+                                  }
+                                  style={{
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  {deleteDefinitionLoadingId === style.id
+                                    ? 'Deleting…'
+                                    : 'Delete'}
+                                </button>
+                            </>
+                          </div>
                         </div>
-                      )}
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </div>

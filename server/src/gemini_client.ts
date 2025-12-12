@@ -5,6 +5,16 @@ type GeminiConfig = {
   model: string;
 };
 
+const isPromptDebugEnabled = (): boolean => {
+  const raw = process.env.DEBUG_PROMPT;
+  if (!raw) return false;
+  const trimmed = raw.trim().toLowerCase();
+  if (trimmed === '' || trimmed === '0' || trimmed === 'false') {
+    return false;
+  }
+  return true;
+};
+
 const getGeminiConfig = (): GeminiConfig => ({
   apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY,
   model: process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview',
@@ -51,6 +61,16 @@ export const renderImageWithGemini = async (
     throw new Error('GEMINI_NOT_CONFIGURED');
   }
 
+  if (isPromptDebugEnabled()) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[ai] Gemini prompt debug (model=${cfg.model}):\n` +
+        '------------------------------------------------------------\n' +
+        `${prompt}\n` +
+        '------------------------------------------------------------',
+    );
+  }
+
   const model = client.getGenerativeModel({
     model: cfg.model,
   });
@@ -81,4 +101,3 @@ export const renderImageWithGemini = async (
 
   return { mimeType, data: buffer };
 };
-

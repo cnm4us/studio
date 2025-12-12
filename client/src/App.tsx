@@ -72,7 +72,10 @@ type Route =
   | { kind: 'project'; projectId: number }
   | { kind: 'spaceNewCharacter'; spaceId: number }
   | { kind: 'spaceNewScene'; spaceId: number }
-  | { kind: 'spaceNewStyle'; spaceId: number };
+  | { kind: 'spaceNewStyle'; spaceId: number }
+  | { kind: 'spaceEditCharacter'; spaceId: number; definitionId: number }
+  | { kind: 'spaceEditScene'; spaceId: number; definitionId: number }
+  | { kind: 'spaceEditStyle'; spaceId: number; definitionId: number };
 
 type SceneCategoryValue = {
   [propertyKey: string]:
@@ -96,14 +99,50 @@ const parseHashRoute = (): Route => {
   if (parts[0] === 'spaces' && parts[1]) {
     const id = Number(parts[1]);
     if (Number.isFinite(id) && id > 0) {
-      if (parts[2] === 'characters' && parts[3] === 'new') {
-        return { kind: 'spaceNewCharacter', spaceId: id };
+      if (parts[2] === 'characters') {
+        if (parts[3] === 'new') {
+          return { kind: 'spaceNewCharacter', spaceId: id };
+        }
+        if (parts[3] && parts[4] === 'edit') {
+          const defId = Number(parts[3]);
+          if (Number.isFinite(defId) && defId > 0) {
+            return {
+              kind: 'spaceEditCharacter',
+              spaceId: id,
+              definitionId: defId,
+            };
+          }
+        }
       }
-      if (parts[2] === 'scenes' && parts[3] === 'new') {
-        return { kind: 'spaceNewScene', spaceId: id };
+      if (parts[2] === 'scenes') {
+        if (parts[3] === 'new') {
+          return { kind: 'spaceNewScene', spaceId: id };
+        }
+        if (parts[3] && parts[4] === 'edit') {
+          const defId = Number(parts[3]);
+          if (Number.isFinite(defId) && defId > 0) {
+            return {
+              kind: 'spaceEditScene',
+              spaceId: id,
+              definitionId: defId,
+            };
+          }
+        }
       }
-      if (parts[2] === 'styles' && parts[3] === 'new') {
-        return { kind: 'spaceNewStyle', spaceId: id };
+      if (parts[2] === 'styles') {
+        if (parts[3] === 'new') {
+          return { kind: 'spaceNewStyle', spaceId: id };
+        }
+        if (parts[3] && parts[4] === 'edit') {
+          const defId = Number(parts[3]);
+          if (Number.isFinite(defId) && defId > 0) {
+            return {
+              kind: 'spaceEditStyle',
+              spaceId: id,
+              definitionId: defId,
+            };
+          }
+        }
       }
       return { kind: 'space', spaceId: id };
     }
@@ -132,6 +171,12 @@ const navigateTo = (route: Route): void => {
     window.location.hash = `#/spaces/${route.spaceId}/scenes/new`;
   } else if (route.kind === 'spaceNewStyle') {
     window.location.hash = `#/spaces/${route.spaceId}/styles/new`;
+  } else if (route.kind === 'spaceEditCharacter') {
+    window.location.hash = `#/spaces/${route.spaceId}/characters/${route.definitionId}/edit`;
+  } else if (route.kind === 'spaceEditScene') {
+    window.location.hash = `#/spaces/${route.spaceId}/scenes/${route.definitionId}/edit`;
+  } else if (route.kind === 'spaceEditStyle') {
+    window.location.hash = `#/spaces/${route.spaceId}/styles/${route.definitionId}/edit`;
   }
 };
 
@@ -583,7 +628,10 @@ function App() {
       route.kind === 'space' ||
       route.kind === 'spaceNewCharacter' ||
       route.kind === 'spaceNewScene' ||
-      route.kind === 'spaceNewStyle'
+      route.kind === 'spaceNewStyle' ||
+      route.kind === 'spaceEditCharacter' ||
+      route.kind === 'spaceEditScene' ||
+      route.kind === 'spaceEditStyle'
     ) {
       desiredSpaceId = route.spaceId;
     } else if (selectedSpaceId) {
@@ -605,7 +653,10 @@ function App() {
     route.kind === 'space' ||
     route.kind === 'spaceNewCharacter' ||
     route.kind === 'spaceNewScene' ||
-    route.kind === 'spaceNewStyle';
+    route.kind === 'spaceNewStyle' ||
+    route.kind === 'spaceEditCharacter' ||
+    route.kind === 'spaceEditScene' ||
+    route.kind === 'spaceEditStyle';
   const isProjectRoute = route.kind === 'project';
 
   const currentSpace =
@@ -619,8 +670,11 @@ function App() {
       : undefined;
 
   const isCreateCharacterRoute = route.kind === 'spaceNewCharacter';
+  const isEditCharacterRoute = route.kind === 'spaceEditCharacter';
   const isCreateSceneRoute = route.kind === 'spaceNewScene';
+  const isEditSceneRoute = route.kind === 'spaceEditScene';
   const isCreateStyleRoute = route.kind === 'spaceNewStyle';
+  const isEditStyleRoute = route.kind === 'spaceEditStyle';
 
   // Debug: log route and selection to help diagnose project/task view issues.
   // eslint-disable-next-line no-console
@@ -707,6 +761,227 @@ function App() {
     selectedSpaceId,
     setUser,
     setSpaces,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const loadForEdit = async (): Promise<void> => {
+      if (route.kind === 'spaceEditCharacter') {
+        const { spaceId, definitionId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/characters/${definitionId}`,
+            { credentials: 'include' },
+          );
+
+          if (res.status === 401) {
+            setUser(null);
+            setSpaces([]);
+            setSpaceCharacters([]);
+            setSpaceScenes([]);
+            setSpaceStyles([]);
+            return;
+          }
+
+          if (!res.ok) {
+            return;
+          }
+
+          const body = (await res.json().catch(() => null)) as
+            | {
+                character?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: CharacterAppearanceMetadata | null;
+                };
+              }
+            | null;
+
+          const character = body?.character;
+          if (!character) {
+            return;
+          }
+
+          setNewCharacterName(character.name ?? '');
+          setNewCharacterDescription(character.description ?? '');
+
+          let incomingMetadata: CharacterAppearanceMetadata = {};
+          const rawCharacterMetadata = character.metadata as unknown;
+          if (rawCharacterMetadata) {
+            if (typeof rawCharacterMetadata === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  rawCharacterMetadata,
+                ) as CharacterAppearanceMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof rawCharacterMetadata === 'object') {
+              incomingMetadata = rawCharacterMetadata as CharacterAppearanceMetadata;
+            }
+          }
+
+          setCharacterMetadata((prev) => {
+            const base = Object.keys(incomingMetadata).length
+              ? incomingMetadata
+              : prev;
+            return {
+              ...base,
+              core_identity: {
+                ...(base.core_identity ?? {}),
+                name: character.name ?? base.core_identity?.name ?? '',
+              },
+            };
+          });
+        } catch {
+          // Swallow; user can retry by reloading.
+        }
+      } else if (route.kind === 'spaceEditScene') {
+        const { spaceId, definitionId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/scenes/${definitionId}`,
+            { credentials: 'include' },
+          );
+
+          if (res.status === 401) {
+            setUser(null);
+            setSpaces([]);
+            setSpaceCharacters([]);
+            setSpaceScenes([]);
+            setSpaceStyles([]);
+            return;
+          }
+
+          if (!res.ok) {
+            return;
+          }
+
+          const body = (await res.json().catch(() => null)) as
+            | {
+                scene?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: SceneDefinitionMetadata | null;
+                };
+              }
+            | null;
+
+          const scene = body?.scene;
+          if (!scene) {
+            return;
+          }
+
+          setNewSceneName(scene.name ?? '');
+          setNewSceneDescription(scene.description ?? '');
+
+          let incomingMetadata: SceneDefinitionMetadata = {};
+          const rawSceneMetadata = scene.metadata as unknown;
+          if (rawSceneMetadata) {
+            if (typeof rawSceneMetadata === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  rawSceneMetadata,
+                ) as SceneDefinitionMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof rawSceneMetadata === 'object') {
+              incomingMetadata = rawSceneMetadata as SceneDefinitionMetadata;
+            }
+          }
+          setSceneMetadata(incomingMetadata);
+        } catch {
+          // Swallow; user can retry by reloading.
+        }
+      } else if (route.kind === 'spaceEditStyle') {
+        const { spaceId, definitionId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/styles/${definitionId}`,
+            { credentials: 'include' },
+          );
+
+          if (res.status === 401) {
+            setUser(null);
+            setSpaces([]);
+            setSpaceCharacters([]);
+            setSpaceScenes([]);
+            setSpaceStyles([]);
+            return;
+          }
+
+          if (!res.ok) {
+            return;
+          }
+
+          const body = (await res.json().catch(() => null)) as
+            | {
+                style?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: StyleDefinitionMetadata | null;
+                };
+              }
+            | null;
+
+          const style = body?.style;
+          if (!style) {
+            return;
+          }
+
+          setNewStyleName(style.name ?? '');
+          setNewStyleDescription(style.description ?? '');
+
+          let incomingMetadata: StyleDefinitionMetadata = {};
+          const rawStyleMetadata = style.metadata as unknown;
+          if (rawStyleMetadata) {
+            if (typeof rawStyleMetadata === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  rawStyleMetadata,
+                ) as StyleDefinitionMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof rawStyleMetadata === 'object') {
+              incomingMetadata = rawStyleMetadata as StyleDefinitionMetadata;
+            }
+          }
+          setStyleMetadata(incomingMetadata);
+        } catch {
+          // Swallow; user can retry by reloading.
+        }
+      }
+    };
+
+    if (
+      route.kind === 'spaceEditCharacter' ||
+      route.kind === 'spaceEditScene' ||
+      route.kind === 'spaceEditStyle'
+    ) {
+      void loadForEdit();
+    }
+  }, [
+    isAuthenticated,
+    route,
+    setUser,
+    setSpaces,
+    setSpaceCharacters,
+    setSpaceScenes,
+    setSpaceStyles,
+    setNewCharacterName,
+    setNewCharacterDescription,
+    setCharacterMetadata,
+    setNewSceneName,
+    setNewSceneDescription,
+    setSceneMetadata,
+    setNewStyleName,
+    setNewStyleDescription,
+    setStyleMetadata,
   ]);
 
   const handleAuthSubmit = async (event: FormEvent): Promise<void> => {
@@ -958,20 +1233,90 @@ function App() {
       metadata = Object.keys(sceneMetadata).length > 0 ? sceneMetadata : null;
     }
 
+    const pathSegment = isCharacter ? 'characters' : 'scenes';
+    const isEditCharacter =
+      isCharacter && route.kind === 'spaceEditCharacter';
+    const isEditScene = !isCharacter && route.kind === 'spaceEditScene';
+    const isEdit = isEditCharacter || isEditScene;
+
+    let url = `/api/spaces/${selectedSpaceId}/${pathSegment}`;
+    let method: 'POST' | 'PATCH' = 'POST';
+
+    if (isEdit) {
+      const definitionId =
+        isEditCharacter && route.kind === 'spaceEditCharacter'
+          ? route.definitionId
+          : isEditScene && route.kind === 'spaceEditScene'
+          ? route.definitionId
+          : null;
+
+      if (definitionId) {
+        url = `/api/spaces/${selectedSpaceId}/${pathSegment}/${definitionId}`;
+        method = 'PATCH';
+      }
+    }
+
     try {
-      const res = await fetch(
-        `/api/spaces/${selectedSpaceId}/${isCharacter ? 'characters' : 'scenes'}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            name,
-            description: description || null,
-            metadata,
-          }),
-        },
-      );
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name,
+          description: description || null,
+          metadata,
+        }),
+      });
+
+      if (method === 'PATCH') {
+        if (res.status === 204) {
+          if (isCharacter) {
+            setNewCharacterName('');
+            setNewCharacterDescription('');
+            setCharacterMetadata({});
+          } else {
+            setNewSceneName('');
+            setNewSceneDescription('');
+            setSceneMetadata({});
+          }
+          if (selectedSpaceId) {
+            void loadDefinitions(selectedSpaceId);
+            navigateTo({ kind: 'space', spaceId: selectedSpaceId });
+          }
+          return;
+        }
+
+        const body = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        const code = body?.error;
+
+        if (code === 'DEFINITION_LOCKED') {
+          setDeleteDefinitionError(
+            'This definition is locked because it has been imported into a project.',
+          );
+        } else if (code === 'DEFINITION_NOT_FOUND') {
+          setDeleteDefinitionError('Definition not found.');
+        } else if (code === 'UNAUTHENTICATED') {
+          setDeleteDefinitionError(
+            'You must be logged in to edit definitions.',
+          );
+          setUser(null);
+          setSpaces([]);
+          setSpaceCharacters([]);
+          setSpaceScenes([]);
+          setSpaceStyles([]);
+        } else if (code === 'INVALID_DEFINITION_ID') {
+          setDeleteDefinitionError('The requested definition id is invalid.');
+        } else if (code === 'NAME_REQUIRED') {
+          setDeleteDefinitionError('A non-empty name is required.');
+        } else if (code === 'NO_FIELDS_TO_UPDATE') {
+          // no-op; UI should ensure we always send at least one field
+        } else {
+          setDeleteDefinitionError('Failed to edit definition.');
+        }
+        return;
+      }
 
       const body = (await res.json().catch(() => null)) as
         | { character?: DefinitionSummary; scene?: DefinitionSummary; error?: string }
@@ -1039,8 +1384,21 @@ function App() {
       const metadata: StyleDefinitionMetadata | null =
         Object.keys(styleMetadata).length > 0 ? styleMetadata : null;
 
-      const res = await fetch(`/api/spaces/${selectedSpaceId}/styles`, {
-        method: 'POST',
+      const isEdit = route.kind === 'spaceEditStyle';
+      let url = `/api/spaces/${selectedSpaceId}/styles`;
+      let method: 'POST' | 'PATCH' = 'POST';
+
+      if (isEdit) {
+        const definitionId =
+          route.kind === 'spaceEditStyle' ? route.definitionId : null;
+        if (definitionId) {
+          url = `/api/spaces/${selectedSpaceId}/styles/${definitionId}`;
+          method = 'PATCH';
+        }
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1051,6 +1409,51 @@ function App() {
           metadata,
         }),
       });
+
+      if (method === 'PATCH') {
+        if (res.status === 204) {
+          setNewStyleName('');
+          setNewStyleDescription('');
+          setStyleMetadata({});
+
+          if (selectedSpaceId) {
+            void loadDefinitions(selectedSpaceId);
+            navigateTo({ kind: 'space', spaceId: selectedSpaceId });
+          }
+          return;
+        }
+
+        const body = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        const code = body?.error;
+
+        if (code === 'DEFINITION_LOCKED') {
+          setDeleteDefinitionError(
+            'This definition is locked because it has been imported into a project.',
+          );
+        } else if (code === 'DEFINITION_NOT_FOUND') {
+          setDeleteDefinitionError('Definition not found.');
+        } else if (code === 'UNAUTHENTICATED') {
+          setDeleteDefinitionError(
+            'You must be logged in to edit definitions.',
+          );
+          setUser(null);
+          setSpaces([]);
+          setSpaceCharacters([]);
+          setSpaceScenes([]);
+          setSpaceStyles([]);
+        } else if (code === 'INVALID_DEFINITION_ID') {
+          setDeleteDefinitionError('The requested definition id is invalid.');
+        } else if (code === 'NAME_REQUIRED') {
+          setDeleteDefinitionError('A non-empty name is required.');
+        } else if (code === 'NO_FIELDS_TO_UPDATE') {
+          // no-op
+        } else {
+          setDeleteDefinitionError('Failed to edit definition.');
+        }
+        return;
+      }
 
       const body = (await res.json().catch(() => null)) as
         | {
@@ -1102,7 +1505,7 @@ function App() {
   };
 
   const handleDeleteSpaceDefinition = async (
-    kind: 'character' | 'scene',
+    kind: 'character' | 'scene' | 'style',
     definitionId: number,
   ): Promise<void> => {
     if (!user || !selectedSpaceId) return;
@@ -1111,8 +1514,15 @@ function App() {
     setDeleteDefinitionLoadingId(definitionId);
 
     try {
+      const pathSegment =
+        kind === 'character'
+          ? 'characters'
+          : kind === 'scene'
+          ? 'scenes'
+          : 'styles';
+
       const res = await fetch(
-        `/api/spaces/${selectedSpaceId}/${kind === 'character' ? 'characters' : 'scenes'}/${definitionId}`,
+        `/api/spaces/${selectedSpaceId}/${pathSegment}/${definitionId}`,
         {
           method: 'DELETE',
           credentials: 'include',
@@ -1124,8 +1534,12 @@ function App() {
           setSpaceCharacters((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
-        } else {
+        } else if (kind === 'scene') {
           setSpaceScenes((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        } else {
+          setSpaceStyles((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
         }
@@ -1151,6 +1565,7 @@ function App() {
         setSpaces([]);
         setSpaceCharacters([]);
         setSpaceScenes([]);
+        setSpaceStyles([]);
       } else if (code === 'INVALID_DEFINITION_ID') {
         setDeleteDefinitionError('The requested definition id is invalid.');
       } else {
@@ -1162,6 +1577,33 @@ function App() {
       setDeleteDefinitionError(message);
     } finally {
       setDeleteDefinitionLoadingId(null);
+    }
+  };
+
+  const handleEditSpaceDefinition = (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ): void => {
+    if (!selectedSpaceId) return;
+
+    if (kind === 'character') {
+      navigateTo({
+        kind: 'spaceEditCharacter',
+        spaceId: selectedSpaceId,
+        definitionId,
+      });
+    } else if (kind === 'scene') {
+      navigateTo({
+        kind: 'spaceEditScene',
+        spaceId: selectedSpaceId,
+        definitionId,
+      });
+    } else {
+      navigateTo({
+        kind: 'spaceEditStyle',
+        spaceId: selectedSpaceId,
+        definitionId,
+      });
     }
   };
 
@@ -1932,6 +2374,7 @@ function App() {
                   });
                 }}
                 onDeleteDefinition={handleDeleteSpaceDefinition}
+                onEditDefinition={handleEditSpaceDefinition}
               />
             )}
 
@@ -1974,7 +2417,7 @@ function App() {
         )}
       </section>
 
-      {isCreateCharacterRoute && currentSpace && (
+      {(isCreateCharacterRoute || isEditCharacterRoute) && currentSpace && (
         <section
           style={{
             border: '1px solid #ddd',
@@ -1984,7 +2427,9 @@ function App() {
           }}
       >
           <h2 style={{ marginTop: 0 }}>
-            Create character in {currentSpace.name}
+            {isEditCharacterRoute
+              ? `Edit character in ${currentSpace.name}`
+              : `Create character in ${currentSpace.name}`}
           </h2>
           <form
             onSubmit={(e) => void handleCreateDefinition(e, 'character')}
@@ -2431,7 +2876,11 @@ function App() {
                 disabled={createDefinitionLoading}
                 style={{ marginRight: '0.5rem' }}
               >
-                {createDefinitionLoading ? 'Saving…' : 'Save character'}
+                {createDefinitionLoading
+                  ? 'Saving…'
+                  : isEditCharacterRoute
+                  ? 'Save changes'
+                  : 'Save character'}
               </button>
               <button
                 type="button"
@@ -2447,7 +2896,7 @@ function App() {
         </section>
       )}
 
-      {isCreateSceneRoute && currentSpace && (
+      {(isCreateSceneRoute || isEditSceneRoute) && currentSpace && (
         <section
           style={{
             border: '1px solid #ddd',
@@ -2456,7 +2905,11 @@ function App() {
             marginTop: '1.5rem',
           }}
         >
-          <h2 style={{ marginTop: 0 }}>Create scene in {currentSpace.name}</h2>
+          <h2 style={{ marginTop: 0 }}>
+            {isEditSceneRoute
+              ? `Edit scene in ${currentSpace.name}`
+              : `Create scene in ${currentSpace.name}`}
+          </h2>
           <form
             onSubmit={(e) => void handleCreateDefinition(e, 'scene')}
             style={{
@@ -2931,7 +3384,11 @@ function App() {
                 disabled={createDefinitionLoading}
                 style={{ marginRight: '0.5rem' }}
               >
-                {createDefinitionLoading ? 'Saving…' : 'Save scene'}
+                {createDefinitionLoading
+                  ? 'Saving…'
+                  : isEditSceneRoute
+                  ? 'Save changes'
+                  : 'Save scene'}
               </button>
               <button
                 type="button"
@@ -2947,7 +3404,7 @@ function App() {
         </section>
       )}
 
-      {isCreateStyleRoute && currentSpace && (
+      {(isCreateStyleRoute || isEditStyleRoute) && currentSpace && (
         <section
           style={{
             border: '1px solid #ddd',
@@ -2956,7 +3413,11 @@ function App() {
             marginTop: '1.5rem',
           }}
       >
-          <h2 style={{ marginTop: 0 }}>Create style in {currentSpace.name}</h2>
+          <h2 style={{ marginTop: 0 }}>
+            {isEditStyleRoute
+              ? `Edit style in ${currentSpace.name}`
+              : `Create style in ${currentSpace.name}`}
+          </h2>
           <form
             onSubmit={(e) => void handleCreateStyleDefinition(e)}
             style={{
@@ -3393,7 +3854,11 @@ function App() {
                 disabled={createDefinitionLoading}
                 style={{ marginRight: '0.5rem' }}
               >
-                {createDefinitionLoading ? 'Saving…' : 'Save style'}
+                {createDefinitionLoading
+                  ? 'Saving…'
+                  : isEditStyleRoute
+                  ? 'Save changes'
+                  : 'Save style'}
               </button>
               <button
                 type="button"

@@ -62,6 +62,45 @@ router.get('/characters', async (req: AuthedRequest, res: Response) => {
   res.status(200).json({ characters: definitions });
 });
 
+router.get(
+  '/characters/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id, name, description, metadata
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'character'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as Array<{
+      id: number;
+      name: string;
+      description: string | null;
+      metadata: unknown | null;
+    }>;
+
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    res.status(200).json({ character: list[0] });
+  },
+);
+
 router.post('/characters', async (req: AuthedRequest, res: Response) => {
   const space = await loadOwnedSpaceOr404(req, res);
   if (!space) {
@@ -94,6 +133,84 @@ router.post('/characters', async (req: AuthedRequest, res: Response) => {
     res.status(500).json({ error: 'CHARACTER_CREATE_FAILED' });
   }
 });
+
+router.patch(
+  '/characters/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'character'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as { id: number }[];
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    const locked = await isSpaceDefinitionLockedForDelete(list[0].id);
+    if (locked) {
+      res.status(409).json({ error: 'DEFINITION_LOCKED' });
+      return;
+    }
+
+    const { name, description, metadata } = req.body as {
+      name?: string;
+      description?: string | null;
+      metadata?: unknown;
+    };
+
+    const updates: string[] = [];
+    const params: unknown[] = [];
+
+    if (typeof name === 'string') {
+      const trimmed = name.trim();
+      if (trimmed.length === 0) {
+        res.status(400).json({ error: 'NAME_REQUIRED' });
+        return;
+      }
+      updates.push('name = ?');
+      params.push(trimmed);
+    }
+
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description);
+    }
+
+    if (metadata !== undefined) {
+      updates.push('metadata = ?');
+      params.push(metadata ? JSON.stringify(metadata) : null);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ error: 'NO_FIELDS_TO_UPDATE' });
+      return;
+    }
+
+    await db.query(
+      `UPDATE definitions SET ${updates.join(', ')} WHERE id = ?`,
+      [...params, list[0].id],
+    );
+
+    res.status(204).end();
+  },
+);
 
 router.delete(
   '/characters/:definitionId',
@@ -145,6 +262,45 @@ router.get('/scenes', async (req: AuthedRequest, res: Response) => {
   res.status(200).json({ scenes: definitions });
 });
 
+router.get(
+  '/scenes/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id, name, description, metadata
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'scene'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as Array<{
+      id: number;
+      name: string;
+      description: string | null;
+      metadata: unknown | null;
+    }>;
+
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    res.status(200).json({ scene: list[0] });
+  },
+);
+
 router.post('/scenes', async (req: AuthedRequest, res: Response) => {
   const space = await loadOwnedSpaceOr404(req, res);
   if (!space) {
@@ -177,6 +333,84 @@ router.post('/scenes', async (req: AuthedRequest, res: Response) => {
     res.status(500).json({ error: 'SCENE_CREATE_FAILED' });
   }
 });
+
+router.patch(
+  '/scenes/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'scene'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as { id: number }[];
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    const locked = await isSpaceDefinitionLockedForDelete(list[0].id);
+    if (locked) {
+      res.status(409).json({ error: 'DEFINITION_LOCKED' });
+      return;
+    }
+
+    const { name, description, metadata } = req.body as {
+      name?: string;
+      description?: string | null;
+      metadata?: unknown;
+    };
+
+    const updates: string[] = [];
+    const params: unknown[] = [];
+
+    if (typeof name === 'string') {
+      const trimmed = name.trim();
+      if (trimmed.length === 0) {
+        res.status(400).json({ error: 'NAME_REQUIRED' });
+        return;
+      }
+      updates.push('name = ?');
+      params.push(trimmed);
+    }
+
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description);
+    }
+
+    if (metadata !== undefined) {
+      updates.push('metadata = ?');
+      params.push(metadata ? JSON.stringify(metadata) : null);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ error: 'NO_FIELDS_TO_UPDATE' });
+      return;
+    }
+
+    await db.query(
+      `UPDATE definitions SET ${updates.join(', ')} WHERE id = ?`,
+      [...params, list[0].id],
+    );
+
+    res.status(204).end();
+  },
+);
 
 router.delete(
   '/scenes/:definitionId',
@@ -228,6 +462,45 @@ router.get('/styles', async (req: AuthedRequest, res: Response) => {
   res.status(200).json({ styles: definitions });
 });
 
+router.get(
+  '/styles/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id, name, description, metadata
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'style'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as Array<{
+      id: number;
+      name: string;
+      description: string | null;
+      metadata: unknown | null;
+    }>;
+
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    res.status(200).json({ style: list[0] });
+  },
+);
+
 router.post('/styles', async (req: AuthedRequest, res: Response) => {
   const space = await loadOwnedSpaceOr404(req, res);
   if (!space) {
@@ -260,5 +533,123 @@ router.post('/styles', async (req: AuthedRequest, res: Response) => {
     res.status(500).json({ error: 'STYLE_CREATE_FAILED' });
   }
 });
+
+router.patch(
+  '/styles/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'style'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as { id: number }[];
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    const locked = await isSpaceDefinitionLockedForDelete(list[0].id);
+    if (locked) {
+      res.status(409).json({ error: 'DEFINITION_LOCKED' });
+      return;
+    }
+
+    const { name, description, metadata } = req.body as {
+      name?: string;
+      description?: string | null;
+      metadata?: unknown;
+    };
+
+    const updates: string[] = [];
+    const params: unknown[] = [];
+
+    if (typeof name === 'string') {
+      const trimmed = name.trim();
+      if (trimmed.length === 0) {
+        res.status(400).json({ error: 'NAME_REQUIRED' });
+        return;
+      }
+      updates.push('name = ?');
+      params.push(trimmed);
+    }
+
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description);
+    }
+
+    if (metadata !== undefined) {
+      updates.push('metadata = ?');
+      params.push(metadata ? JSON.stringify(metadata) : null);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ error: 'NO_FIELDS_TO_UPDATE' });
+      return;
+    }
+
+    await db.query(
+      `UPDATE definitions SET ${updates.join(', ')} WHERE id = ?`,
+      [...params, list[0].id],
+    );
+
+    res.status(204).end();
+  },
+);
+
+router.delete(
+  '/styles/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'style'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as { id: number }[];
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    const locked = await isSpaceDefinitionLockedForDelete(list[0].id);
+    if (locked) {
+      res.status(409).json({ error: 'DEFINITION_LOCKED' });
+      return;
+    }
+
+    await db.query('DELETE FROM definitions WHERE id = ?', [list[0].id]);
+    res.status(204).end();
+  },
+);
 
 export { router as spaceDefinitionsRouter };
