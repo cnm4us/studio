@@ -5,6 +5,16 @@ type GeminiConfig = {
   model: string;
 };
 
+export type GeminiInlineImage = {
+  data: string;
+  mimeType: string;
+};
+
+export type GeminiRenderOptions = {
+  prompt: string;
+  inlineImages?: GeminiInlineImage[];
+};
+
 const isPromptDebugEnabled = (): boolean => {
   const raw = process.env.DEBUG_PROMPT;
   if (!raw) return false;
@@ -53,13 +63,23 @@ export const logGeminiStatus = (): void => {
 };
 
 export const renderImageWithGemini = async (
-  prompt: string,
+  arg: string | GeminiRenderOptions,
 ): Promise<{ mimeType: string; data: Buffer }> => {
   const cfg = getGeminiConfig();
   const client = getGeminiClient();
   if (!client || !cfg.apiKey) {
     throw new Error('GEMINI_NOT_CONFIGURED');
   }
+
+  const options: GeminiRenderOptions =
+    typeof arg === 'string'
+      ? { prompt: arg }
+      : {
+          prompt: arg.prompt,
+          inlineImages: arg.inlineImages ?? [],
+        };
+
+  const { prompt, inlineImages } = options;
 
   if (isPromptDebugEnabled()) {
     // eslint-disable-next-line no-console
@@ -69,13 +89,36 @@ export const renderImageWithGemini = async (
         `${prompt}\n` +
         '------------------------------------------------------------',
     );
+    if (inlineImages && inlineImages.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[ai] Gemini inline images: count=${inlineImages.length}`,
+      );
+    }
   }
 
   const model = client.getGenerativeModel({
     model: cfg.model,
   });
 
-  const result = await model.generateContent(prompt);
+  const result = await (async () => {
+    if (!inlineImages || inlineImages.length === 0) {
+      return model.generateContent(prompt);
+    }
+
+    const parts: Array<{ text: string } | { inlineData: GeminiInlineImage }> = [
+      { text: prompt },
+      ...inlineImages.map((img) => ({
+        inlineData: {
+          data: img.data,
+          mimeType: img.mimeType,
+        },
+      })),
+    ];
+
+    return model.generateContent(parts as any);
+  })();
+
   const response = result.response;
   const candidates = response.candidates ?? [];
   const first = candidates[0];

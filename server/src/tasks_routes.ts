@@ -18,7 +18,10 @@ import {
   updateTaskStatus,
 } from './tasks_service.js';
 import type { RenderedAssetRecord } from './tasks_service.js';
-import { renderImageWithGemini } from './gemini_client.js';
+import {
+  renderImageWithGemini,
+  type GeminiInlineImage,
+} from './gemini_client.js';
 import type {
   CharacterAppearanceMetadata,
   StyleDefinitionMetadata,
@@ -30,6 +33,10 @@ import {
 } from './asset_reference_helpers.js';
 import { getSpaceAssetsByIds } from './space_assets_service.js';
 import { uploadImageToS3 } from './s3_client.js';
+import {
+  loadInlineImageParts,
+  type InlineImageInput,
+} from './image_inline_helpers.js';
 
 type AuthedRequest = Request & { user?: PublicUser };
 
@@ -54,6 +61,7 @@ type TaskWithProject = {
 };
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
+const MAX_INLINE_IMAGES = 8;
 
 const parseJsonIfString = <T>(value: unknown): T | null => {
   if (value == null) return null;
@@ -822,17 +830,18 @@ taskRenderRouter.post(
 
       let resolvedImageRefs: import('./prompt_renderer.js').ResolvedPromptImageRef[] =
         [];
+      let inlineImageInputs: InlineImageInput[] = [];
 
       try {
         const assetIdSet = new Set<number>();
-          for (const ref of collectedRefs) {
-            for (const rawId of ref.assetIds) {
-              const numeric = Number(rawId);
-              if (Number.isFinite(numeric) && numeric > 0) {
-                assetIdSet.add(numeric);
-              }
+        for (const ref of collectedRefs) {
+          for (const rawId of ref.assetIds) {
+            const numeric = Number(rawId);
+            if (Number.isFinite(numeric) && numeric > 0) {
+              assetIdSet.add(numeric);
             }
           }
+        }
 
         const assetIds = Array.from(assetIdSet);
         if (assetIds.length > 0 && task.space_id) {
@@ -866,6 +875,28 @@ taskRenderRouter.post(
               })
               .filter(Boolean) as import('./prompt_renderer.js').ResolvedPromptImageRef[],
           );
+
+          inlineImageInputs = collectedRefs
+            .flatMap((ref) =>
+              ref.assetIds.map((rawId) => {
+                const id = Number(rawId);
+                if (!Number.isFinite(id)) return null;
+                const asset = assetsById.get(id);
+                if (!asset) return null;
+                const meta = asset.metadata as
+                  | { mimeType?: string | null }
+                  | null;
+                const mimeType =
+                  meta && typeof meta === 'object' && meta.mimeType
+                    ? String(meta.mimeType)
+                    : 'image/jpeg';
+                return {
+                  fileKey: asset.file_key,
+                  mimeType,
+                } as InlineImageInput;
+              }),
+            )
+            .filter(Boolean) as InlineImageInput[];
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -874,6 +905,7 @@ taskRenderRouter.post(
           err,
         );
         resolvedImageRefs = [];
+        inlineImageInputs = [];
       }
 
       const finalPrompt = renderPrompt({
@@ -890,8 +922,62 @@ taskRenderRouter.post(
         scene: sceneMeta,
         imageReferences: resolvedImageRefs,
       });
+      const hasInlineImages = inlineImageInputs.length > 0;
 
-      const image = await renderImageWithGemini(finalPrompt);
+      let inlineImages: GeminiInlineImage[] = [];
+      if (hasInlineImages) {
+        const cappedInputs = inlineImageInputs.slice(0, MAX_INLINE_IMAGES);
+        if (cappedInputs.length < inlineImageInputs.length) {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[ai] Truncating inline images for task ${task.id}: requested=${inlineImageInputs.length}, capped=${cappedInputs.length}`,
+          );
+        }
+
+        try {
+          const parts = await loadInlineImageParts(cappedInputs);
+          inlineImages = parts.map((part) => ({
+            data: part.inlineData.data,
+            mimeType: part.inlineData.mimeType,
+          }));
+
+          if (inlineImages.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+              '[ai] Inline images loaded for task',
+              task.id,
+              'count=',
+              inlineImages.length,
+            );
+            if (resolvedImageRefs.length > 0) {
+              // eslint-disable-next-line no-console
+              console.log('[ai] Inline image refs for task', task.id);
+              for (const ref of resolvedImageRefs) {
+                // Note: this may include more refs than are inlined
+                // if caps/truncation applied.
+                // That is acceptable for high-level traceability.
+                // eslint-disable-next-line no-console
+                console.log(
+                  `  - ${ref.scope}/${ref.assetType}: definition="${ref.definitionName}", assetName="${ref.assetName}"`,
+                );
+              }
+            }
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(
+            '[space-assets] Failed to load inline images from S3; falling back to text-only prompt:',
+            err,
+          );
+          inlineImages = [];
+        }
+      }
+
+      const image = await renderImageWithGemini(
+        inlineImages.length > 0
+          ? { prompt: finalPrompt, inlineImages }
+          : finalPrompt,
+      );
 
       const timestamp = Date.now();
       const extension =
