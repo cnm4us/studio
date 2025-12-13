@@ -91,7 +91,7 @@ This runs `src/index.ts` through `tsx` on the port specified in `PORT` (6000 by 
 npm run start
 ```
 
-This runs the compiled `dist/index.js` and is what you would place behind Nginx or a process manager in production.
+This runs the compiled `dist/server/src/index.js` and is what you would place behind Nginx or a process manager in production.
 
 ### Gemini, S3 and render pipeline
 

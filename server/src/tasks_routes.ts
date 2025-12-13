@@ -20,6 +20,7 @@ import type {
   CharacterAppearanceMetadata,
   StyleDefinitionMetadata,
 } from './definition_metadata.js';
+import { renderPrompt } from './prompt_renderer.js';
 import { uploadImageToS3 } from './s3_client.js';
 
 type AuthedRequest = Request & { user?: PublicUser };
@@ -45,6 +46,21 @@ type TaskWithProject = {
 };
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
+
+const parseJsonIfString = <T>(value: unknown): T | null => {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === 'object') {
+    return value as T;
+  }
+  return null;
+};
 
 const maybeSignAssetUrl = (asset: RenderedAssetRecord): RenderedAssetRecord => {
   const domain = process.env.CF_DOMAIN;
@@ -549,42 +565,31 @@ taskRenderRouter.post(
         sceneDefinition = list[0];
       }
 
-      const characterMetas: CharacterAppearanceMetadata[] = characterDefinitions.map(
-        (def) =>
-          (def?.metadata as CharacterAppearanceMetadata | null) ?? ({} as any),
-      );
-      const styleMeta =
-        (styleDefinition?.metadata as StyleDefinitionMetadata | null) ?? null;
-      const sceneMeta = sceneDefinition?.metadata ?? null;
-
-      const promptParts: string[] = [prompt];
-
-      if (characterDefinitions.length > 0) {
-        for (let i = 0; i < characterDefinitions.length; i += 1) {
-          const def = characterDefinitions[i];
-          const meta = characterMetas[i] ?? null;
-          const coreName = meta?.core_identity?.name;
-          promptParts.push(
-            `Character details: ${
-              coreName ? `${coreName}, ` : ''
-            }appearance=${JSON.stringify(meta ?? {})}`,
+      const characterMetas: CharacterAppearanceMetadata[] =
+        characterDefinitions.map((def) => {
+          const parsed = parseJsonIfString<CharacterAppearanceMetadata>(
+            def?.metadata,
           );
-        }
-      }
+          return parsed ?? ({} as CharacterAppearanceMetadata);
+        });
+      const styleMeta = parseJsonIfString<StyleDefinitionMetadata>(
+        styleDefinition?.metadata,
+      );
+      const sceneMeta = parseJsonIfString<unknown>(sceneDefinition?.metadata);
 
-      if (styleDefinition) {
-        promptParts.push(
-          `Style details: ${JSON.stringify(styleMeta ?? {})}`,
-        );
-      }
-
-      if (sceneDefinition) {
-        promptParts.push(
-          `Scene details: ${JSON.stringify(sceneMeta ?? {})}`,
-        );
-      }
-
-      const finalPrompt = promptParts.join('\n\n');
+      const finalPrompt = renderPrompt({
+        taskPrompt: prompt,
+        characters: characterDefinitions.map((def, index) => {
+          const meta = characterMetas[index] ?? null;
+          const coreName = meta?.core_identity?.name;
+          return {
+            name: coreName || (def?.name as string) || 'Character',
+            metadata: meta,
+          };
+        }),
+        style: styleMeta,
+        scene: sceneMeta,
+      });
 
       const image = await renderImageWithGemini(finalPrompt);
 
