@@ -110,3 +110,49 @@ CREATE TABLE IF NOT EXISTS rendered_assets (
   INDEX idx_rendered_assets_project (project_id),
   INDEX idx_rendered_assets_task (task_id)
 );
+
+-- Plan 17: Space-level tasks and rendered assets (unified tables)
+-- Note: apply these ALTER statements to existing databases when enabling
+-- space-scoped tasks and renders.
+
+ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS space_id INT UNSIGNED NULL AFTER project_id;
+
+ALTER TABLE tasks
+  MODIFY COLUMN project_id INT UNSIGNED NULL;
+
+ALTER TABLE tasks
+  ADD CONSTRAINT fk_tasks_space_id
+    FOREIGN KEY (space_id) REFERENCES spaces(id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE;
+
+-- Backfill existing tasks with their owning space, based on projects.
+UPDATE tasks t
+JOIN projects p ON p.id = t.project_id
+SET t.space_id = p.space_id
+WHERE t.space_id IS NULL;
+
+ALTER TABLE tasks
+  ADD INDEX IF NOT EXISTS idx_tasks_space_status (space_id, status);
+
+ALTER TABLE rendered_assets
+  ADD COLUMN IF NOT EXISTS space_id INT UNSIGNED NULL AFTER project_id;
+
+ALTER TABLE rendered_assets
+  MODIFY COLUMN project_id INT UNSIGNED NULL;
+
+ALTER TABLE rendered_assets
+  ADD CONSTRAINT fk_rendered_assets_space_id
+    FOREIGN KEY (space_id) REFERENCES spaces(id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE;
+
+-- Backfill existing rendered assets with their owning space, based on tasks.
+UPDATE rendered_assets ra
+JOIN tasks t ON t.id = ra.task_id
+SET ra.space_id = t.space_id
+WHERE ra.space_id IS NULL;
+
+ALTER TABLE rendered_assets
+  ADD INDEX IF NOT EXISTS idx_rendered_assets_space (space_id);

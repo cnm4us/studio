@@ -4,7 +4,8 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export type TaskRecord = {
   id: number;
-  project_id: number;
+  project_id: number | null;
+  space_id: number | null;
   name: string;
   description: string | null;
   prompt: string | null;
@@ -15,7 +16,8 @@ export type TaskRecord = {
 
 export type RenderedAssetRecord = {
   id: number;
-  project_id: number;
+  project_id: number | null;
+  space_id: number | null;
   task_id: number;
   type: string;
   file_key: string;
@@ -34,8 +36,12 @@ export const createTask = async (
   const db = getDbPool();
 
   const [result] = await db.query(
-    'INSERT INTO tasks (project_id, name, description, prompt, status) VALUES (?, ?, ?, ?, ?)',
-    [projectId, name, description, prompt, 'pending'],
+    `INSERT INTO tasks (project_id, space_id, name, description, prompt, status)
+     SELECT p.id, p.space_id, ?, ?, ?, ?
+     FROM projects p
+     WHERE p.id = ?
+     LIMIT 1`,
+    [name, description, prompt, 'pending', projectId],
   );
 
   const insertResult = result as { insertId?: number };
@@ -66,6 +72,51 @@ export const listProjectTasks = async (
   return rows as TaskRecord[];
 };
 
+export const createSpaceTask = async (
+  spaceId: number,
+  name: string,
+  description: string | null,
+  prompt: string | null,
+): Promise<TaskRecord> => {
+  const db = getDbPool();
+
+  const [result] = await db.query(
+    `INSERT INTO tasks (project_id, space_id, name, description, prompt, status)
+     VALUES (NULL, ?, ?, ?, ?, ?)`,
+    [spaceId, name, description, prompt, 'pending'],
+  );
+
+  const insertResult = result as { insertId?: number };
+  const id = insertResult.insertId;
+  if (!id) {
+    throw new Error('TASK_CREATE_FAILED');
+  }
+
+  const [rows] = await db.query('SELECT * FROM tasks WHERE id = ? LIMIT 1', [
+    id,
+  ]);
+  const list = rows as TaskRecord[];
+  if (list.length === 0) {
+    throw new Error('TASK_LOAD_FAILED');
+  }
+
+  return list[0];
+};
+
+export const listSpaceTasks = async (
+  spaceId: number,
+): Promise<TaskRecord[]> => {
+  const db = getDbPool();
+  const [rows] = await db.query(
+    `SELECT *
+     FROM tasks
+     WHERE space_id = ? AND project_id IS NULL
+     ORDER BY created_at DESC`,
+    [spaceId],
+  );
+  return rows as TaskRecord[];
+};
+
 export const listRenderedAssetsByProject = async (
   projectId: number,
 ): Promise<RenderedAssetRecord[]> => {
@@ -73,6 +124,20 @@ export const listRenderedAssetsByProject = async (
   const [rows] = await db.query(
     'SELECT * FROM rendered_assets WHERE project_id = ? ORDER BY created_at DESC',
     [projectId],
+  );
+  return rows as RenderedAssetRecord[];
+};
+
+export const listRenderedAssetsBySpace = async (
+  spaceId: number,
+): Promise<RenderedAssetRecord[]> => {
+  const db = getDbPool();
+  const [rows] = await db.query(
+    `SELECT *
+     FROM rendered_assets
+     WHERE space_id = ? AND project_id IS NULL
+     ORDER BY created_at DESC`,
+    [spaceId],
   );
   return rows as RenderedAssetRecord[];
 };
@@ -118,7 +183,8 @@ export const deleteTask = async (taskId: number): Promise<void> => {
 };
 
 export const createRenderedAsset = async (
-  projectId: number,
+  projectId: number | null,
+  spaceId: number | null,
   taskId: number,
   type: string,
   fileKey: string,
@@ -128,8 +194,18 @@ export const createRenderedAsset = async (
   const db = getDbPool();
 
   const [result] = await db.query(
-    'INSERT INTO rendered_assets (project_id, task_id, type, file_key, file_url, metadata, state) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [projectId, taskId, type, fileKey, fileUrl, JSON.stringify(metadata), 'draft'],
+    `INSERT INTO rendered_assets (project_id, space_id, task_id, type, file_key, file_url, metadata, state)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      projectId,
+      spaceId,
+      taskId,
+      type,
+      fileKey,
+      fileUrl,
+      JSON.stringify(metadata),
+      'draft',
+    ],
   );
 
   const insertResult = result as { insertId?: number };

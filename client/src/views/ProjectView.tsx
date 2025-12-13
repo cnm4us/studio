@@ -1102,10 +1102,7 @@ export function ProjectView(props: ProjectViewProps) {
                               prompt: cast.prompt || null,
                             })
                           }
-                          disabled={
-                            renderingTaskId === task.id ||
-                            task.status === 'running'
-                          }
+                          disabled={renderingTaskId === task.id}
                           style={{
                             padding: '0.35rem 0.9rem',
                             borderRadius: '4px',
@@ -1113,8 +1110,7 @@ export function ProjectView(props: ProjectViewProps) {
                             backgroundColor: '#1565c0',
                             color: '#fff',
                             cursor:
-                              renderingTaskId === task.id ||
-                              task.status === 'running'
+                              renderingTaskId === task.id
                                 ? 'default'
                                 : 'pointer',
                           }}

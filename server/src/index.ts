@@ -11,6 +11,7 @@ import { projectImportRouter } from './project_import_routes.js';
 import { projectDefinitionsRouter } from './project_definitions_routes.js';
 import {
   projectTasksRouter,
+  spaceTasksRouter,
   taskRenderRouter,
   renderedAssetsRouter,
 } from './tasks_routes.js';
@@ -42,6 +43,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/spaces', spacesRouter);
 app.use('/api/spaces/:spaceId/projects', projectsRouter);
 app.use('/api/spaces/:spaceId', spaceDefinitionsRouter);
+app.use('/api/spaces/:spaceId', spaceTasksRouter);
 app.use('/api/projects/:projectId/import', projectImportRouter);
 app.use('/api/projects/:projectId/definitions', projectDefinitionsRouter);
 app.use('/api/projects/:projectId', projectTasksRouter);

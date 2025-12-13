@@ -7,6 +7,7 @@ import { SpaceView } from './views/SpaceView';
 import { CharacterDefinitionFormView } from './views/CharacterDefinitionFormView';
 import { SceneDefinitionFormView } from './views/SceneDefinitionFormView';
 import { StyleDefinitionFormView } from './views/StyleDefinitionFormView';
+import { SpaceTasksView } from './views/SpaceTasksView';
 import type {
   CharacterAppearanceMetadata,
   SceneDefinitionMetadata,
@@ -57,7 +58,8 @@ type TaskSummary = {
 
 type RenderedAssetSummary = {
   id: number;
-  project_id: number;
+  project_id: number | null;
+  space_id: number | null;
   task_id: number;
   type: string;
   file_key: string;
@@ -348,7 +350,7 @@ function App() {
         const firstProject = data.projects[0];
         setSelectedProjectId(firstProject.id);
         void loadProjectTasks(firstProject.id);
-        void loadRenderedAssets(firstProject.id);
+        void loadRenderedAssetsForProject(firstProject.id);
         void loadProjectDefinitions(firstProject.id);
       }
     } catch (err) {
@@ -471,7 +473,44 @@ function App() {
     }
   };
 
-  const loadRenderedAssets = async (projectId: number): Promise<void> => {
+  const loadSpaceTasks = async (spaceId: number): Promise<void> => {
+    setTasksLoading(true);
+    setTasksError(null);
+    try {
+      const res = await fetch(`/api/spaces/${spaceId}/tasks`, {
+        credentials: 'include',
+      });
+      if (res.status === 401) {
+        setUser(null);
+        setSpaces([]);
+        setProjects([]);
+        setTasks([]);
+        setRenderedAssets([]);
+        return;
+      }
+      if (res.status === 404) {
+        setTasks([]);
+        setTasksError('Space not found or not owned by this user.');
+        return;
+      }
+      if (!res.ok) {
+        throw new Error('TASKS_FETCH_FAILED');
+      }
+      const data = (await res.json()) as { tasks: TaskSummary[] };
+      setTasks(data.tasks ?? []);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load tasks.';
+      setTasksError(message);
+      setTasks([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  };
+
+  const loadRenderedAssetsForProject = async (
+    projectId: number,
+  ): Promise<void> => {
     setAssetsLoading(true);
     setAssetsError(null);
     try {
@@ -489,6 +528,43 @@ function App() {
       if (res.status === 404) {
         setRenderedAssets([]);
         setAssetsError('Project not found or not owned by this user.');
+        return;
+      }
+      if (!res.ok) {
+        throw new Error('RENDERED_ASSETS_FETCH_FAILED');
+      }
+      const data = (await res.json()) as {
+        assets: RenderedAssetSummary[];
+      };
+      setRenderedAssets(data.assets ?? []);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load rendered assets.';
+      setAssetsError(message);
+      setRenderedAssets([]);
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
+
+  const loadRenderedAssetsForSpace = async (spaceId: number): Promise<void> => {
+    setAssetsLoading(true);
+    setAssetsError(null);
+    try {
+      const res = await fetch(`/api/spaces/${spaceId}/rendered-assets`, {
+        credentials: 'include',
+      });
+      if (res.status === 401) {
+        setUser(null);
+        setSpaces([]);
+        setProjects([]);
+        setTasks([]);
+        setRenderedAssets([]);
+        return;
+      }
+      if (res.status === 404) {
+        setRenderedAssets([]);
+        setAssetsError('Space not found or not owned by this user.');
         return;
       }
       if (!res.ok) {
@@ -608,6 +684,11 @@ function App() {
     if (!isAuthenticated) {
       return;
     }
+    // When we are on a project route, space-level task/render loads are
+    // handled separately; avoid clobbering project task/render state here.
+    if (route.kind === 'project') {
+      return;
+    }
     if (spaces.length === 0) {
       return;
     }
@@ -630,10 +711,14 @@ function App() {
       desiredSpaceId = spaces[0]?.id ?? null;
     }
 
-    if (desiredSpaceId && desiredSpaceId !== selectedSpaceId) {
-      setSelectedSpaceId(desiredSpaceId);
+    if (desiredSpaceId) {
+      if (desiredSpaceId !== selectedSpaceId) {
+        setSelectedSpaceId(desiredSpaceId);
+      }
       void loadProjects(desiredSpaceId);
       void loadDefinitions(desiredSpaceId);
+      void loadSpaceTasks(desiredSpaceId);
+      void loadRenderedAssetsForSpace(desiredSpaceId);
     }
   }, [isAuthenticated, selectedSpaceId, spaces, route]);
 
@@ -687,10 +772,6 @@ function App() {
 
     const targetProjectId = route.projectId;
 
-    if (selectedProjectId === targetProjectId && selectedSpaceId) {
-      return;
-    }
-
     (async () => {
       try {
         const res = await fetch(`/api/projects/${targetProjectId}`, {
@@ -736,7 +817,7 @@ function App() {
         void loadProjects(project.spaceId);
         void loadDefinitions(project.spaceId);
         void loadProjectTasks(project.id);
-        void loadRenderedAssets(project.id);
+        void loadRenderedAssetsForProject(project.id);
         void loadProjectDefinitions(project.id);
       } catch (error: any) {
         const message =
@@ -1125,6 +1206,8 @@ function App() {
     setSpaceStyles([]);
     void loadProjects(spaceId);
     void loadDefinitions(spaceId);
+    void loadSpaceTasks(spaceId);
+    void loadRenderedAssetsForSpace(spaceId);
   };
 
   const handleCreateProject = async (event: FormEvent): Promise<void> => {
@@ -1190,7 +1273,7 @@ function App() {
     console.log('[ui] handleSelectProject', { projectId });
     setSelectedProjectId(projectId);
     void loadProjectTasks(projectId);
-    void loadRenderedAssets(projectId);
+    void loadRenderedAssetsForProject(projectId);
     void loadProjectDefinitions(projectId);
   };
 
@@ -1843,19 +1926,32 @@ function App() {
 
   const handleCreateTask = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
+    if (!user) return;
+
+    const isSpaceTaskContext = isSpaceContextRoute && !isProjectRoute;
+
     const projectIdForTask =
-      selectedProjectId && isProjectRoute
+      !isSpaceTaskContext &&
+      (selectedProjectId && isProjectRoute
         ? selectedProjectId
         : route.kind === 'project'
         ? route.projectId
-        : null;
-    if (!user || !projectIdForTask) return;
+        : null);
+
+    const spaceIdForTask =
+      isSpaceTaskContext && selectedSpaceId ? selectedSpaceId : null;
+
+    if (!projectIdForTask && !spaceIdForTask) return;
 
     setCreateTaskError(null);
     setCreateTaskLoading(true);
 
     try {
-      const res = await fetch(`/api/projects/${projectIdForTask}/tasks`, {
+      const baseUrl = projectIdForTask
+        ? `/api/projects/${projectIdForTask}`
+        : `/api/spaces/${spaceIdForTask}`;
+
+      const res = await fetch(`${baseUrl}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1883,6 +1979,8 @@ function App() {
           setRenderedAssets([]);
         } else if (code === 'PROJECT_NOT_FOUND') {
           setCreateTaskError('Project not found or not owned by this user.');
+        } else if (code === 'SPACE_NOT_FOUND') {
+          setCreateTaskError('Space not found or not owned by this user.');
         } else {
           setCreateTaskError('Failed to create task.');
         }
@@ -2365,6 +2463,32 @@ function App() {
                 }}
                 onDeleteDefinition={handleDeleteSpaceDefinition}
                 onEditDefinition={handleEditSpaceDefinition}
+              />
+            )}
+
+            {isSpaceOverviewRoute && selectedSpaceId && (
+              <SpaceTasksView
+                spaceCharacters={spaceCharacters}
+                spaceScenes={spaceScenes}
+                spaceStyles={spaceStyles}
+                tasksLoading={tasksLoading}
+                tasksError={tasksError}
+                tasks={tasks}
+                newTaskName={newTaskName}
+                setNewTaskName={setNewTaskName}
+                newTaskDescription={newTaskDescription}
+                setNewTaskDescription={setNewTaskDescription}
+                createTaskLoading={createTaskLoading}
+                createTaskError={createTaskError}
+                renderingTaskId={renderingTaskId}
+                renderError={renderError}
+                assetsLoading={assetsLoading}
+                assetsError={assetsError}
+                renderedAssets={renderedAssets}
+                onCreateTask={handleCreateTask}
+                onRenderTask={handleRenderTask}
+                onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
+                onDeleteTask={handleDeleteTask}
               />
             )}
 

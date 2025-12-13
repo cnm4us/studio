@@ -6,11 +6,14 @@ import type { PublicUser } from './auth_service.js';
 import { attachUserFromToken, requireAuth } from './auth_routes.js';
 import {
   createRenderedAsset,
+  createSpaceTask,
   createTask,
   deleteTask,
+  getRenderedAssetById,
   listProjectTasks,
   listRenderedAssetsByProject,
-  getRenderedAssetById,
+  listRenderedAssetsBySpace,
+  listSpaceTasks,
   updateRenderedAssetState,
   updateTaskStatus,
 } from './tasks_service.js';
@@ -35,14 +38,14 @@ type ProjectRecord = {
 
 type TaskWithProject = {
   id: number;
-  project_id: number;
+  project_id: number | null;
+  space_id: number;
   name: string;
   description: string | null;
   prompt: string | null;
   status: string;
   created_at: Date;
   updated_at: Date;
-  space_id: number;
 };
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
@@ -94,11 +97,14 @@ const maybeSignAssets = (
 ): RenderedAssetRecord[] => assets.map((asset) => maybeSignAssetUrl(asset));
 
 const projectsRouter = express.Router({ mergeParams: true });
+const spaceTasksRouter = express.Router({ mergeParams: true });
 const taskRenderRouter = express.Router({ mergeParams: true });
 const renderedAssetsRouter = express.Router({ mergeParams: true });
 
 projectsRouter.use(attachUserFromToken as any);
 projectsRouter.use(requireAuth as any);
+spaceTasksRouter.use(attachUserFromToken as any);
+spaceTasksRouter.use(requireAuth as any);
 taskRenderRouter.use(attachUserFromToken as any);
 taskRenderRouter.use(requireAuth as any);
 renderedAssetsRouter.use(attachUserFromToken as any);
@@ -162,10 +168,9 @@ const loadOwnedRenderedAssetOr404 = async (
 
   const db = getDbPool();
   const [rows] = await db.query(
-    `SELECT ra.*, p.space_id
+    `SELECT ra.*
      FROM rendered_assets ra
-     JOIN projects p ON p.id = ra.project_id
-     JOIN spaces s ON s.id = p.space_id
+     JOIN spaces s ON s.id = ra.space_id
      WHERE ra.id = ? AND s.user_id = ?
      LIMIT 1`,
     [numericAssetId, user.id],
@@ -198,10 +203,9 @@ const loadOwnedTaskOr404 = async (
 
   const db = getDbPool();
   const [rows] = await db.query(
-    `SELECT t.*, p.space_id
+    `SELECT t.*
      FROM tasks t
-     JOIN projects p ON p.id = t.project_id
-     JOIN spaces s ON s.id = p.space_id
+     JOIN spaces s ON s.id = t.space_id
      WHERE t.id = ? AND s.user_id = ?
      LIMIT 1`,
     [numericTaskId, user.id],
@@ -364,6 +368,189 @@ projectsRouter.get(
   },
 );
 
+// Space-scoped tasks and rendered assets
+
+spaceTasksRouter.post(
+  '/tasks',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'UNAUTHENTICATED' });
+      return;
+    }
+
+    const { spaceId } = req.params as { spaceId?: string };
+    const numericSpaceId = spaceId ? Number(spaceId) : NaN;
+    if (!Number.isFinite(numericSpaceId) || numericSpaceId <= 0) {
+      res.status(400).json({ error: 'INVALID_SPACE_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      'SELECT id FROM spaces WHERE id = ? AND user_id = ? LIMIT 1',
+      [numericSpaceId, user.id],
+    );
+    const list = rows as Array<{ id: number }>;
+    if (list.length === 0) {
+      res.status(404).json({ error: 'SPACE_NOT_FOUND' });
+      return;
+    }
+
+    const { name, description, prompt } = req.body as {
+      name?: string;
+      description?: string | null;
+      prompt?: string | null;
+    };
+
+    if (!name || name.trim().length === 0) {
+      res.status(400).json({ error: 'NAME_REQUIRED' });
+      return;
+    }
+
+    try {
+      const task = await createSpaceTask(
+        numericSpaceId,
+        name.trim(),
+        description ?? null,
+        prompt ?? null,
+      );
+      res.status(201).json({ task });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[space-tasks] Create task error:', error);
+      res.status(500).json({ error: 'TASK_CREATE_FAILED' });
+    }
+  },
+);
+
+spaceTasksRouter.get(
+  '/tasks',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'UNAUTHENTICATED' });
+      return;
+    }
+
+    const { spaceId } = req.params as { spaceId?: string };
+    const numericSpaceId = spaceId ? Number(spaceId) : NaN;
+    if (!Number.isFinite(numericSpaceId) || numericSpaceId <= 0) {
+      res.status(400).json({ error: 'INVALID_SPACE_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      'SELECT id FROM spaces WHERE id = ? AND user_id = ? LIMIT 1',
+      [numericSpaceId, user.id],
+    );
+    const list = rows as Array<{ id: number }>;
+    if (list.length === 0) {
+      res.status(404).json({ error: 'SPACE_NOT_FOUND' });
+      return;
+    }
+
+    try {
+      const tasks = await listSpaceTasks(numericSpaceId);
+
+      const [assetRows] = await db.query(
+        `SELECT task_id, state, COUNT(*) AS count
+         FROM rendered_assets
+         WHERE space_id = ?
+         GROUP BY task_id, state`,
+        [numericSpaceId],
+      );
+
+      const assetStats = new Map<
+        number,
+        { approved: number; draftOrRunning: number }
+      >();
+
+      (assetRows as Array<{ task_id: number; state: string; count: number }>).forEach(
+        (row) => {
+          const current = assetStats.get(row.task_id) ?? {
+            approved: 0,
+            draftOrRunning: 0,
+          };
+          if (row.state === 'approved') {
+            current.approved += Number(row.count) || 0;
+          } else if (row.state === 'draft') {
+            current.draftOrRunning += Number(row.count) || 0;
+          }
+          assetStats.set(row.task_id, current);
+        },
+      );
+
+      const projected = tasks.map((task) => {
+        const stats = assetStats.get(task.id) ?? {
+          approved: 0,
+          draftOrRunning: 0,
+        };
+
+        let status = task.status;
+        if (task.status === 'failed') {
+          status = 'failed';
+        } else if (stats.approved > 0) {
+          status = 'completed';
+        } else if (task.status === 'running' || stats.draftOrRunning > 0) {
+          status = 'running';
+        } else {
+          status = 'pending';
+        }
+
+        return { ...task, status };
+      });
+
+      res.status(200).json({ tasks: projected });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[space-tasks] List tasks error:', error);
+      res.status(500).json({ error: 'TASK_LIST_FAILED' });
+    }
+  },
+);
+
+spaceTasksRouter.get(
+  '/rendered-assets',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'UNAUTHENTICATED' });
+      return;
+    }
+
+    const { spaceId } = req.params as { spaceId?: string };
+    const numericSpaceId = spaceId ? Number(spaceId) : NaN;
+    if (!Number.isFinite(numericSpaceId) || numericSpaceId <= 0) {
+      res.status(400).json({ error: 'INVALID_SPACE_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      'SELECT id FROM spaces WHERE id = ? AND user_id = ? LIMIT 1',
+      [numericSpaceId, user.id],
+    );
+    const list = rows as Array<{ id: number }>;
+    if (list.length === 0) {
+      res.status(404).json({ error: 'SPACE_NOT_FOUND' });
+      return;
+    }
+
+    try {
+      const assets = await listRenderedAssetsBySpace(numericSpaceId);
+      const visible = assets.filter((asset) => asset.state !== 'archived');
+      const signed = maybeSignAssets(visible);
+      res.status(200).json({ assets: signed });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[space-tasks] List rendered assets error:', error);
+      res.status(500).json({ error: 'RENDERED_ASSET_LIST_FAILED' });
+    }
+  },
+);
+
 // Rendered asset state updates (draft/approved/archived)
 
 renderedAssetsRouter.patch(
@@ -421,15 +608,18 @@ taskRenderRouter.delete(
     const db = getDbPool();
 
     const [rows] = await db.query(
-      `SELECT t.id, t.project_id, p.space_id
+      `SELECT t.id, t.project_id, t.space_id
        FROM tasks t
-       JOIN projects p ON p.id = t.project_id
-       JOIN spaces s ON s.id = p.space_id
+       JOIN spaces s ON s.id = t.space_id
        WHERE t.id = ? AND s.user_id = ?
        LIMIT 1`,
       [numericTaskId, user.id],
     );
-    const list = rows as Array<{ id: number; project_id: number; space_id: number }>;
+    const list = rows as Array<{
+      id: number;
+      project_id: number | null;
+      space_id: number;
+    }>;
     if (list.length === 0) {
       res.status(404).json({ error: 'TASK_NOT_FOUND' });
       return;
@@ -477,7 +667,11 @@ taskRenderRouter.post(
       if (task.prompt && task.prompt.trim().length > 0) {
         prompt = task.prompt;
       } else {
-        prompt = `Render an image for project ${task.project_id} / task ${task.id}`;
+        if (task.project_id) {
+          prompt = `Render an image for project ${task.project_id} / task ${task.id}`;
+        } else {
+          prompt = `Render an image for space ${task.space_id} / task ${task.id}`;
+        }
       }
     }
 
@@ -601,7 +795,10 @@ taskRenderRouter.post(
           ? 'jpg'
           : 'bin';
 
-      const key = `projects/${task.project_id}/tasks/${task.id}/${timestamp}.${extension}`;
+      const key =
+        task.project_id != null
+          ? `projects/${task.project_id}/tasks/${task.id}/${timestamp}.${extension}`
+          : `spaces/${task.space_id}/tasks/${task.id}/${timestamp}.${extension}`;
       const uploadResult = await uploadImageToS3(
         key,
         image.data,
@@ -628,6 +825,7 @@ taskRenderRouter.post(
 
       const asset = await createRenderedAsset(
         task.project_id,
+        task.space_id,
         task.id,
         'image',
         uploadResult.key,
@@ -677,6 +875,7 @@ taskRenderRouter.post(
 
 export {
   projectsRouter as projectTasksRouter,
+  spaceTasksRouter,
   taskRenderRouter,
   renderedAssetsRouter,
 };
