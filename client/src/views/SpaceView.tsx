@@ -33,6 +33,10 @@ type SpaceViewProps = {
     kind: 'character' | 'scene' | 'style',
     definitionId: number,
   ) => void;
+  onCloneDefinition: (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ) => void;
 };
 
 export function SpaceView(props: SpaceViewProps) {
@@ -61,6 +65,7 @@ export function SpaceView(props: SpaceViewProps) {
     onCreateStyle,
     onDeleteDefinition,
     onEditDefinition,
+    onCloneDefinition,
   } = props;
 
   const [editing, setEditing] = useState<{
@@ -351,34 +356,43 @@ export function SpaceView(props: SpaceViewProps) {
                             }}
                           >
                             <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onCloneDefinition('character', c.id)
+                                }
+                                style={{ fontSize: '0.8rem' }}
+                              >
+                                Clone
+                              </button>
                               {!c.isLocked && (
                                 <button
                                   type="button"
                                   onClick={() =>
-                                      onEditDefinition('character', c.id)
-                                    }
-                                    style={{ fontSize: '0.8rem' }}
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onDeleteDefinition('character', c.id)
+                                    onEditDefinition('character', c.id)
                                   }
-                                  disabled={
-                                    deleteDefinitionLoadingId === c.id ||
-                                    c.isLocked
-                                  }
-                                  style={{
-                                    fontSize: '0.8rem',
-                                  }}
+                                  style={{ fontSize: '0.8rem' }}
                                 >
-                                  {deleteDefinitionLoadingId === c.id
-                                    ? 'Deleting…'
-                                    : 'Delete'}
+                                  Edit
                                 </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onDeleteDefinition('character', c.id)
+                                }
+                                disabled={
+                                  deleteDefinitionLoadingId === c.id ||
+                                  c.isLocked
+                                }
+                                style={{
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {deleteDefinitionLoadingId === c.id
+                                  ? 'Deleting…'
+                                  : 'Delete'}
+                              </button>
                             </>
                           </div>
                         </div>
@@ -508,34 +522,43 @@ export function SpaceView(props: SpaceViewProps) {
                             }}
                           >
                             <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onCloneDefinition('scene', s.id)
+                                }
+                                style={{ fontSize: '0.8rem' }}
+                              >
+                                Clone
+                              </button>
                               {!s.isLocked && (
                                 <button
                                   type="button"
-                                    onClick={() =>
-                                      onEditDefinition('scene', s.id)
-                                    }
-                                    style={{ fontSize: '0.8rem' }}
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
                                   onClick={() =>
-                                    onDeleteDefinition('scene', s.id)
+                                    onEditDefinition('scene', s.id)
                                   }
-                                  disabled={
-                                    deleteDefinitionLoadingId === s.id ||
-                                    s.isLocked
-                                  }
-                                  style={{
-                                    fontSize: '0.8rem',
-                                  }}
+                                  style={{ fontSize: '0.8rem' }}
                                 >
-                                  {deleteDefinitionLoadingId === s.id
-                                    ? 'Deleting…'
-                                    : 'Delete'}
+                                  Edit
                                 </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onDeleteDefinition('scene', s.id)
+                                }
+                                disabled={
+                                  deleteDefinitionLoadingId === s.id ||
+                                  s.isLocked
+                                }
+                                style={{
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {deleteDefinitionLoadingId === s.id
+                                  ? 'Deleting…'
+                                  : 'Delete'}
+                              </button>
                             </>
                           </div>
                         </div>
@@ -667,34 +690,43 @@ export function SpaceView(props: SpaceViewProps) {
                             }}
                           >
                             <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onCloneDefinition('style', style.id)
+                                }
+                                style={{ fontSize: '0.8rem' }}
+                              >
+                                Clone
+                              </button>
                               {!style.isLocked && (
                                 <button
                                   type="button"
-                                    onClick={() =>
-                                      onEditDefinition('style', style.id)
-                                    }
-                                    style={{ fontSize: '0.8rem' }}
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
                                   onClick={() =>
-                                    onDeleteDefinition('style', style.id)
+                                    onEditDefinition('style', style.id)
                                   }
-                                  disabled={
-                                    deleteDefinitionLoadingId === style.id ||
-                                    style.isLocked
-                                  }
-                                  style={{
-                                    fontSize: '0.8rem',
-                                  }}
+                                  style={{ fontSize: '0.8rem' }}
                                 >
-                                  {deleteDefinitionLoadingId === style.id
-                                    ? 'Deleting…'
-                                    : 'Delete'}
+                                  Edit
                                 </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onDeleteDefinition('style', style.id)
+                                }
+                                disabled={
+                                  deleteDefinitionLoadingId === style.id ||
+                                  style.isLocked
+                                }
+                                style={{
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {deleteDefinitionLoadingId === style.id
+                                  ? 'Deleting…'
+                                  : 'Delete'}
+                              </button>
                             </>
                           </div>
                         </div>

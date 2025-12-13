@@ -260,6 +260,13 @@ function App() {
     string | null
   >(null);
 
+  // Clone context for Space-level definitions
+  const [cloneCharacterFromId, setCloneCharacterFromId] = useState<
+    number | null
+  >(null);
+  const [cloneSceneFromId, setCloneSceneFromId] = useState<number | null>(null);
+  const [cloneStyleFromId, setCloneStyleFromId] = useState<number | null>(null);
+
   const [route, setRoute] = useState<Route>(() => parseHashRoute());
 
   useEffect(() => {
@@ -1055,6 +1062,208 @@ function App() {
     setStyleMetadata,
   ]);
 
+  // Prefill "new" definition forms when cloning from an existing space definition.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const doClonePrefill = async (): Promise<void> => {
+      if (route.kind === 'spaceNewCharacter' && cloneCharacterFromId) {
+        const { spaceId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/characters/${cloneCharacterFromId}`,
+            { credentials: 'include' },
+          );
+          if (!res.ok) {
+            setCloneCharacterFromId(null);
+            return;
+          }
+          const body = (await res.json().catch(() => null)) as
+            | {
+                character?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: CharacterAppearanceMetadata | null;
+                };
+              }
+            | null;
+          const character = body?.character;
+          if (!character) {
+            setCloneCharacterFromId(null);
+            return;
+          }
+
+          const baseName = character.name ?? '';
+          setNewCharacterName(
+            baseName && !baseName.toLowerCase().includes('clone')
+              ? `${baseName} (clone)`
+              : baseName,
+          );
+          setNewCharacterDescription(character.description ?? '');
+
+          let incomingMetadata: CharacterAppearanceMetadata = {};
+          const raw = character.metadata as unknown;
+          if (raw) {
+            if (typeof raw === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  raw,
+                ) as CharacterAppearanceMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof raw === 'object') {
+              incomingMetadata = raw as CharacterAppearanceMetadata;
+            }
+          }
+
+          setCharacterMetadata((prev) => {
+            const base = Object.keys(incomingMetadata).length
+              ? incomingMetadata
+              : prev;
+            const name = baseName || base.core_identity?.name || '';
+            return {
+              ...base,
+              core_identity: {
+                ...(base.core_identity ?? {}),
+                name,
+              },
+            };
+          });
+        } catch {
+          // ignore and continue
+        } finally {
+          setCloneCharacterFromId(null);
+        }
+      } else if (route.kind === 'spaceNewScene' && cloneSceneFromId) {
+        const { spaceId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/scenes/${cloneSceneFromId}`,
+            { credentials: 'include' },
+          );
+          if (!res.ok) {
+            setCloneSceneFromId(null);
+            return;
+          }
+          const body = (await res.json().catch(() => null)) as
+            | {
+                scene?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: SceneDefinitionMetadata | null;
+                };
+              }
+            | null;
+          const scene = body?.scene;
+          if (!scene) {
+            setCloneSceneFromId(null);
+            return;
+          }
+
+          const baseName = scene.name ?? '';
+          setNewSceneName(
+            baseName && !baseName.toLowerCase().includes('clone')
+              ? `${baseName} (clone)`
+              : baseName,
+          );
+          setNewSceneDescription(scene.description ?? '');
+
+          let incomingMetadata: SceneDefinitionMetadata = {};
+          const raw = scene.metadata as unknown;
+          if (raw) {
+            if (typeof raw === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  raw,
+                ) as SceneDefinitionMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof raw === 'object') {
+              incomingMetadata = raw as SceneDefinitionMetadata;
+            }
+          }
+          setSceneMetadata(incomingMetadata);
+        } catch {
+          // ignore
+        } finally {
+          setCloneSceneFromId(null);
+        }
+      } else if (route.kind === 'spaceNewStyle' && cloneStyleFromId) {
+        const { spaceId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/styles/${cloneStyleFromId}`,
+            { credentials: 'include' },
+          );
+          if (!res.ok) {
+            setCloneStyleFromId(null);
+            return;
+          }
+          const body = (await res.json().catch(() => null)) as
+            | {
+                style?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: StyleDefinitionMetadata | null;
+                };
+              }
+            | null;
+          const style = body?.style;
+          if (!style) {
+            setCloneStyleFromId(null);
+            return;
+          }
+
+          const baseName = style.name ?? '';
+          setNewStyleName(
+            baseName && !baseName.toLowerCase().includes('clone')
+              ? `${baseName} (clone)`
+              : baseName,
+          );
+          setNewStyleDescription(style.description ?? '');
+
+          let incomingMetadata: StyleDefinitionMetadata = {};
+          const raw = style.metadata as unknown;
+          if (raw) {
+            if (typeof raw === 'string') {
+              try {
+                incomingMetadata = JSON.parse(raw) as StyleDefinitionMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof raw === 'object') {
+              incomingMetadata = raw as StyleDefinitionMetadata;
+            }
+          }
+          setStyleMetadata(incomingMetadata);
+        } catch {
+          // ignore
+        } finally {
+          setCloneStyleFromId(null);
+        }
+      }
+    };
+
+    void doClonePrefill();
+  }, [
+    isAuthenticated,
+    route,
+    cloneCharacterFromId,
+    cloneSceneFromId,
+    cloneStyleFromId,
+    setNewCharacterName,
+    setNewCharacterDescription,
+    setCharacterMetadata,
+    setNewSceneName,
+    setNewSceneDescription,
+    setSceneMetadata,
+    setNewStyleName,
+    setNewStyleDescription,
+    setStyleMetadata,
+  ]);
+
   const handleAuthSubmit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     setAuthError(null);
@@ -1275,6 +1484,33 @@ function App() {
     void loadProjectTasks(projectId);
     void loadRenderedAssetsForProject(projectId);
     void loadProjectDefinitions(projectId);
+  };
+
+  const handleCloneSpaceDefinition = (
+    kind: 'character' | 'scene' | 'style',
+    definitionId: number,
+  ): void => {
+    if (!selectedSpaceId) return;
+
+    if (kind === 'character') {
+      setCloneCharacterFromId(definitionId);
+      navigateTo({
+        kind: 'spaceNewCharacter',
+        spaceId: selectedSpaceId,
+      });
+    } else if (kind === 'scene') {
+      setCloneSceneFromId(definitionId);
+      navigateTo({
+        kind: 'spaceNewScene',
+        spaceId: selectedSpaceId,
+      });
+    } else {
+      setCloneStyleFromId(definitionId);
+      navigateTo({
+        kind: 'spaceNewStyle',
+        spaceId: selectedSpaceId,
+      });
+    }
   };
 
   const handleCreateDefinition = async (
@@ -2463,6 +2699,7 @@ function App() {
                 }}
                 onDeleteDefinition={handleDeleteSpaceDefinition}
                 onEditDefinition={handleEditSpaceDefinition}
+                onCloneDefinition={handleCloneSpaceDefinition}
               />
             )}
 
