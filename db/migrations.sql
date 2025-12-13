@@ -156,3 +156,32 @@ WHERE ra.space_id IS NULL;
 
 ALTER TABLE rendered_assets
   ADD INDEX IF NOT EXISTS idx_rendered_assets_space (space_id);
+
+-- Plan 19_1: Space-level assets (reference images)
+
+CREATE TABLE IF NOT EXISTS space_assets (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  space_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  type ENUM(
+    'character_face',
+    'character_body',
+    'character_hair',
+    'character_full',
+    'character_prop',
+    'character_clothing',
+    'scene_reference',
+    'style_reference'
+  ) NOT NULL,
+  file_key VARCHAR(512) NOT NULL,
+  file_url TEXT NOT NULL,
+  metadata JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_space_assets_space_id
+    FOREIGN KEY (space_id) REFERENCES spaces(id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  INDEX idx_space_assets_space (space_id),
+  INDEX idx_space_assets_space_type (space_id, type)
+);

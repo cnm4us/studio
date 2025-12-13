@@ -15,6 +15,7 @@ import {
   taskRenderRouter,
   renderedAssetsRouter,
 } from './tasks_routes.js';
+import { spaceAssetsRouter } from './space_assets_routes.js';
 
 dotenv.config({ path: new URL('../../.env', import.meta.url).pathname });
 
@@ -44,6 +45,7 @@ app.use('/api/spaces', spacesRouter);
 app.use('/api/spaces/:spaceId/projects', projectsRouter);
 app.use('/api/spaces/:spaceId', spaceDefinitionsRouter);
 app.use('/api/spaces/:spaceId', spaceTasksRouter);
+app.use('/api/spaces/:spaceId/assets', spaceAssetsRouter);
 app.use('/api/projects/:projectId/import', projectImportRouter);
 app.use('/api/projects/:projectId/definitions', projectDefinitionsRouter);
 app.use('/api/projects/:projectId', projectTasksRouter);

@@ -7,6 +7,7 @@ import { colorEnvironmentCategory } from "./colorEnvironment.js";
 import { cameraAndCompositionCategory } from "./cameraAndComposition.js";
 import { propsAndSetDressCategory } from "./propsAndSetDress.js";
 import { sceneLoreCategory } from "./sceneLore.js";
+import { referenceImagesCategory } from "./referenceImages.js";
 
 export * from "./types.js";
 
@@ -20,5 +21,6 @@ export const sceneDefinitionConfig: SceneDefinitionConfig = {
     cameraAndCompositionCategory,
     propsAndSetDressCategory,
     sceneLoreCategory,
+    referenceImagesCategory,
   ],
 };

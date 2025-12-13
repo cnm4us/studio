@@ -6,6 +6,7 @@ import { colorCategory } from "./color.js";
 import { renderingTechniqueCategory } from './renderingTechnique.js';
 import { compositionAndCameraCategory } from './compositionAndCamera.js';
 import { moodAndAtmosphereCategory } from './moodAndAtmosphere.js';
+import { referenceImagesCategory } from './referenceImages.js';
 
 export * from './types.js';
 
@@ -18,5 +19,6 @@ export const styleDefinitionConfig: StyleDefinitionConfig = {
     renderingTechniqueCategory,
     compositionAndCameraCategory,
     moodAndAtmosphereCategory,
+    referenceImagesCategory,
   ],
 };

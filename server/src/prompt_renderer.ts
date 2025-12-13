@@ -11,10 +11,23 @@ import {
   findStyleProperty,
   resolveOptionLabel,
 } from './definition_config_helpers.js';
+import {
+  assetReferenceBindings,
+  type AssetReferenceType,
+} from '../../shared/definition_config/assetReferenceMapping.js';
+import type { PromptAssetRefScope } from './asset_reference_helpers.js';
 
 export type RenderCharacterInput = {
   name: string;
   metadata: CharacterAppearanceMetadata | null;
+};
+
+export type ResolvedPromptImageRef = {
+  scope: PromptAssetRefScope;
+  definitionName: string;
+  assetType: AssetReferenceType;
+  assetName: string;
+  url: string;
 };
 
 export type RenderPromptOptions = {
@@ -22,6 +35,7 @@ export type RenderPromptOptions = {
   characters: RenderCharacterInput[];
   style: StyleDefinitionMetadata | null;
   scene: unknown | null;
+  imageReferences?: ResolvedPromptImageRef[];
 };
 
 const SECTION_IMAGE_REFERENCES = 'IMAGE REFERENCES';
@@ -51,6 +65,31 @@ const STYLE_CATEGORY_ORDER: Array<keyof StyleDefinitionMetadata> = [
   'composition_and_camera',
   'mood_and_atmosphere',
 ];
+
+const CHARACTER_ASSET_KEYS_BY_CATEGORY = new Map<string, Set<string>>();
+const STYLE_ASSET_KEYS_BY_CATEGORY = new Map<string, Set<string>>();
+const SCENE_ASSET_KEYS_BY_CATEGORY = new Map<string, Set<string>>();
+
+for (const binding of assetReferenceBindings) {
+  const targetMap =
+    binding.definitionType === 'character'
+      ? CHARACTER_ASSET_KEYS_BY_CATEGORY
+      : binding.definitionType === 'scene'
+      ? SCENE_ASSET_KEYS_BY_CATEGORY
+      : STYLE_ASSET_KEYS_BY_CATEGORY;
+
+  const categoryKey = binding.metadataCategoryKey;
+  let set = targetMap.get(categoryKey);
+  if (!set) {
+    set = new Set<string>();
+    targetMap.set(categoryKey, set);
+  }
+
+  set.add(binding.metadataPropertyKey);
+  if (binding.legacyMetadataPropertyKey) {
+    set.add(binding.legacyMetadataPropertyKey);
+  }
+}
 
 const humanizeKey = (key: string): string => {
   const withSpaces = key.replace(/_/g, ' ');
@@ -99,6 +138,83 @@ const formatValue = (
   return formatScalarValue(value, options);
 };
 
+const ASSET_TYPE_LABELS: Record<AssetReferenceType, string> = {
+  character_face: 'Face reference images',
+  character_body: 'Body reference images',
+  character_hair: 'Hair reference images',
+  character_full: 'Full-character reference images',
+  character_prop: 'Prop reference images',
+  character_clothing: 'Clothing reference images',
+  scene_reference: 'Scene reference images',
+  style_reference: 'Style reference images',
+};
+
+const SCOPE_LABELS: Record<PromptAssetRefScope, string> = {
+  character: 'Character references',
+  scene: 'Scene references',
+  style: 'Style references',
+};
+
+const renderImageReferencesSection = (
+  imageReferences?: ResolvedPromptImageRef[],
+): string => {
+  if (!imageReferences || imageReferences.length === 0) {
+    return [
+      SECTION_IMAGE_REFERENCES,
+      '- No image reference constraints provided.',
+    ].join('\n');
+  }
+
+  const lines: string[] = [];
+  lines.push(SECTION_IMAGE_REFERENCES);
+
+  const scopes: PromptAssetRefScope[] = ['character', 'scene', 'style'];
+
+  for (const scope of scopes) {
+    const refsForScope = imageReferences.filter(
+      (ref) => ref.scope === scope,
+    );
+    if (refsForScope.length === 0) continue;
+
+    lines.push(`${SCOPE_LABELS[scope]}:`);
+
+    const byDefinition = new Map<string, ResolvedPromptImageRef[]>();
+    for (const ref of refsForScope) {
+      const key = ref.definitionName || 'Unnamed';
+      const existing = byDefinition.get(key);
+      if (existing) {
+        existing.push(ref);
+      } else {
+        byDefinition.set(key, [ref]);
+      }
+    }
+
+    for (const [definitionName, refsForDef] of byDefinition.entries()) {
+      const byType = new Map<AssetReferenceType, ResolvedPromptImageRef[]>();
+      for (const ref of refsForDef) {
+        const existing = byType.get(ref.assetType);
+        if (existing) {
+          existing.push(ref);
+        } else {
+          byType.set(ref.assetType, [ref]);
+        }
+      }
+
+      for (const [assetType, refsOfType] of byType.entries()) {
+        const typeLabel = ASSET_TYPE_LABELS[assetType] ?? assetType;
+        lines.push(`- ${definitionName} — ${typeLabel}:`);
+        for (const ref of refsOfType) {
+          lines.push(`  - ${ref.assetName}: ${ref.url}`);
+        }
+      }
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n').trimEnd();
+};
+
 const renderCharacterBlock = (character: RenderCharacterInput): string => {
   const lines: string[] = [];
 
@@ -117,15 +233,21 @@ const renderCharacterBlock = (character: RenderCharacterInput): string => {
       continue;
     }
 
+    const categoryKeyStr = String(categoryKey);
+    const skipKeys = CHARACTER_ASSET_KEYS_BY_CATEGORY.get(categoryKeyStr);
+
     const entries = Object.entries(category).filter(
       ([key, value]) =>
-        key !== 'name' && value !== null && value !== undefined,
+        key !== 'name' &&
+        value !== null &&
+        value !== undefined &&
+        !(skipKeys && skipKeys.has(key)),
     );
     if (entries.length === 0) {
       continue;
     }
 
-    const categoryConfig = findCharacterCategory(String(categoryKey));
+    const categoryConfig = findCharacterCategory(categoryKeyStr);
     const categoryLabel =
       categoryConfig?.label ?? humanizeKey(String(categoryKey));
 
@@ -157,9 +279,13 @@ const renderCharacterBlock = (character: RenderCharacterInput): string => {
       continue;
     }
 
-    const entries = Object.entries(category).filter(
-      ([, value]) => value !== null && value !== undefined,
-    );
+    const skipKeys = CHARACTER_ASSET_KEYS_BY_CATEGORY.get(extraKey);
+
+    const entries = Object.entries(category).filter(([propKey, value]) => {
+      if (value === null || value === undefined) return false;
+      if (skipKeys && skipKeys.has(propKey)) return false;
+      return true;
+    });
     if (entries.length === 0) {
       continue;
     }
@@ -198,12 +324,17 @@ const renderStyleSection = (
       | undefined;
     if (!category || typeof category !== 'object') continue;
 
-    const entries = Object.entries(category).filter(
-      ([, value]) => value !== null && value !== undefined,
-    );
+    const categoryKeyStr = String(categoryKey);
+    const skipKeys = STYLE_ASSET_KEYS_BY_CATEGORY.get(categoryKeyStr);
+
+    const entries = Object.entries(category).filter(([propKey, value]) => {
+      if (value === null || value === undefined) return false;
+      if (skipKeys && skipKeys.has(propKey)) return false;
+      return true;
+    });
     if (entries.length === 0) continue;
 
-    const categoryConfig = findStyleCategory(String(categoryKey));
+    const categoryConfig = findStyleCategory(categoryKeyStr);
     const categoryLabel =
       categoryConfig?.label ?? humanizeKey(String(categoryKey));
 
@@ -232,9 +363,13 @@ const renderStyleSection = (
       | undefined;
     if (!category || typeof category !== 'object') continue;
 
-    const entries = Object.entries(category).filter(
-      ([, value]) => value !== null && value !== undefined,
-    );
+    const skipKeys = STYLE_ASSET_KEYS_BY_CATEGORY.get(extraKey);
+
+    const entries = Object.entries(category).filter(([propKey, value]) => {
+      if (value === null || value === undefined) return false;
+      if (skipKeys && skipKeys.has(propKey)) return false;
+      return true;
+    });
     if (entries.length === 0) continue;
 
     const categoryConfig = findStyleCategory(extraKey);
@@ -269,9 +404,15 @@ const renderSceneSection = (scene: unknown): string | '' => {
       continue;
     }
 
+    const skipKeys = SCENE_ASSET_KEYS_BY_CATEGORY.get(categoryKey);
+
     const entries = Object.entries(
       category as Record<string, unknown>,
-    ).filter(([, value]) => value !== null && value !== undefined);
+    ).filter(([propKey, value]) => {
+      if (value === null || value === undefined) return false;
+      if (skipKeys && skipKeys.has(propKey)) return false;
+      return true;
+    });
     if (entries.length === 0) continue;
 
     const categoryConfig = findSceneCategory(categoryKey);
@@ -292,17 +433,12 @@ const renderSceneSection = (scene: unknown): string | '' => {
 };
 
 export const renderPrompt = (options: RenderPromptOptions): string => {
-  const { taskPrompt, characters, style, scene } = options;
+  const { taskPrompt, characters, style, scene, imageReferences } = options;
 
   const sections: string[] = [];
 
-  // 1. IMAGE REFERENCES (placeholder for now)
-  sections.push(
-    [
-      SECTION_IMAGE_REFERENCES,
-      '- No image reference constraints provided.',
-    ].join('\n'),
-  );
+  // 1. IMAGE REFERENCES
+  sections.push(renderImageReferencesSection(imageReferences));
 
   // 2. STYLE (placeholder for now; will be expanded in later steps)
   if (style) {

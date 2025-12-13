@@ -37,6 +37,7 @@ type SpaceViewProps = {
     kind: 'character' | 'scene' | 'style',
     definitionId: number,
   ) => void;
+  onOpenAssets: () => void;
 };
 
 export function SpaceView(props: SpaceViewProps) {
@@ -66,6 +67,7 @@ export function SpaceView(props: SpaceViewProps) {
     onDeleteDefinition,
     onEditDefinition,
     onCloneDefinition,
+    onOpenAssets,
   } = props;
 
   const [editing, setEditing] = useState<{
@@ -200,6 +202,9 @@ export function SpaceView(props: SpaceViewProps) {
           </button>
           <button type="button" onClick={onCreateStyle}>
             Create style
+          </button>
+          <button type="button" onClick={onOpenAssets}>
+            Add assets
           </button>
         </div>
         {definitionsError && (

@@ -24,6 +24,11 @@ import type {
   StyleDefinitionMetadata,
 } from './definition_metadata.js';
 import { renderPrompt } from './prompt_renderer.js';
+import {
+  collectAssetRefsFromMetadata,
+  type CollectedAssetRef,
+} from './asset_reference_helpers.js';
+import { getSpaceAssetsByIds } from './space_assets_service.js';
 import { uploadImageToS3 } from './s3_client.js';
 
 type AuthedRequest = Request & { user?: PublicUser };
@@ -65,17 +70,17 @@ const parseJsonIfString = <T>(value: unknown): T | null => {
   return null;
 };
 
-const maybeSignAssetUrl = (asset: RenderedAssetRecord): RenderedAssetRecord => {
+const signUrlForFileKey = (fileKey: string, existingUrl: string): string => {
   const domain = process.env.CF_DOMAIN;
   const keyPairId = process.env.CF_KEY_PAIR_ID;
   const privateKey = process.env.CF_PRIVATE_KEY_PEM;
 
   if (!domain || !keyPairId || !privateKey) {
-    return asset;
+    return existingUrl;
   }
 
   const trimmedDomain = domain.replace(/\/+$/, '');
-  const baseUrl = `https://${trimmedDomain}/${asset.file_key}`;
+  const baseUrl = `https://${trimmedDomain}/${fileKey}`;
 
   try {
     const signedUrl = getSignedUrl({
@@ -84,12 +89,20 @@ const maybeSignAssetUrl = (asset: RenderedAssetRecord): RenderedAssetRecord => {
       privateKey,
       dateLessThan: new Date(Date.now() + SIGNED_URL_TTL_MS).toISOString(),
     });
-    return { ...asset, file_url: signedUrl };
+    return signedUrl;
   } catch (error: any) {
     // eslint-disable-next-line no-console
-    console.error('[cdn] Failed to sign CloudFront URL; falling back to plain URL:', error);
-    return { ...asset, file_url: baseUrl };
+    console.error(
+      '[cdn] Failed to sign CloudFront URL; falling back to plain URL:',
+      error,
+    );
+    return baseUrl;
   }
+};
+
+const maybeSignAssetUrl = (asset: RenderedAssetRecord): RenderedAssetRecord => {
+  const url = signUrlForFileKey(asset.file_key, asset.file_url);
+  return { ...asset, file_url: url };
 };
 
 const maybeSignAssets = (
@@ -771,6 +784,98 @@ taskRenderRouter.post(
       );
       const sceneMeta = parseJsonIfString<unknown>(sceneDefinition?.metadata);
 
+      let collectedRefs: CollectedAssetRef[] = [];
+      try {
+        collectedRefs = collectAssetRefsFromMetadata({
+          characters: characterDefinitions.map((def, index) => {
+            const meta = characterMetas[index] ?? null;
+            const coreName = meta?.core_identity?.name;
+            return {
+              id: def.id as number,
+              name: coreName || (def?.name as string) || 'Character',
+              metadata: meta,
+            };
+          }),
+          style: styleDefinition
+            ? {
+                id: styleDefinition.id as number,
+                name: (styleDefinition.name as string) ?? 'Style',
+                metadata: styleMeta ?? null,
+              }
+            : null,
+          scene: sceneDefinition
+            ? {
+                id: sceneDefinition.id as number,
+                name: (sceneDefinition.name as string) ?? 'Scene',
+                metadata: (sceneMeta as Record<string, unknown>) ?? null,
+              }
+            : null,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[space-assets] Failed to collect asset references from metadata:',
+          err,
+        );
+        collectedRefs = [];
+      }
+
+      let resolvedImageRefs: import('./prompt_renderer.js').ResolvedPromptImageRef[] =
+        [];
+
+      try {
+        const assetIdSet = new Set<number>();
+          for (const ref of collectedRefs) {
+            for (const rawId of ref.assetIds) {
+              const numeric = Number(rawId);
+              if (Number.isFinite(numeric) && numeric > 0) {
+                assetIdSet.add(numeric);
+              }
+            }
+          }
+
+        const assetIds = Array.from(assetIdSet);
+        if (assetIds.length > 0 && task.space_id) {
+          const spaceAssets = await getSpaceAssetsByIds(
+            task.space_id,
+            assetIds,
+          );
+          const assetsById = new Map<number, (typeof spaceAssets)[number]>();
+          for (const asset of spaceAssets) {
+            assetsById.set(asset.id, asset);
+          }
+
+          resolvedImageRefs = collectedRefs.flatMap((ref) =>
+            ref.assetIds
+              .map((rawId) => {
+                const id = Number(rawId);
+                if (!Number.isFinite(id)) return null;
+                const asset = assetsById.get(id);
+                if (!asset) return null;
+                const signedUrl = signUrlForFileKey(
+                  asset.file_key,
+                  asset.file_url,
+                );
+                return {
+                  scope: ref.scope,
+                  definitionName: ref.definitionName,
+                  assetType: ref.binding.assetType,
+                  assetName: asset.name,
+                  url: signedUrl,
+                };
+              })
+              .filter(Boolean) as import('./prompt_renderer.js').ResolvedPromptImageRef[],
+          );
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          '[space-assets] Failed to resolve space assets for prompt; continuing without image references:',
+          err,
+        );
+        resolvedImageRefs = [];
+      }
+
       const finalPrompt = renderPrompt({
         taskPrompt: prompt,
         characters: characterDefinitions.map((def, index) => {
@@ -783,6 +888,7 @@ taskRenderRouter.post(
         }),
         style: styleMeta,
         scene: sceneMeta,
+        imageReferences: resolvedImageRefs,
       });
 
       const image = await renderImageWithGemini(finalPrompt);

@@ -75,10 +75,16 @@ export type CharacterAppearanceMetadata = {
     [key: string]: string | string[] | undefined;
   };
   base_reference_images?: {
+    // Legacy single-ID fields (kept for compatibility)
     face_reference_image_id?: string;
     body_reference_image_id?: string;
     hair_reference_image_id?: string;
     full_character_reference_image_id?: string;
+    // Preferred multi-asset fields
+    face_reference_image_ids?: string[];
+    body_reference_image_ids?: string[];
+    hair_reference_image_ids?: string[];
+    full_character_reference_image_ids?: string[];
     [key: string]: string | string[] | undefined;
   };
 };
@@ -117,6 +123,11 @@ export type StyleDefinitionMetadata = {
   mood_and_atmosphere?: {
     mood_keywords?: string[];
     atmosphere?: string[];
+    [key: string]: string | string[] | undefined;
+  };
+  // Optional reference images category for styles
+  reference_images?: {
+    style_reference_image_ids?: string[];
     [key: string]: string | string[] | undefined;
   };
 };

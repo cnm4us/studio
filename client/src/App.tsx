@@ -8,6 +8,7 @@ import { CharacterDefinitionFormView } from './views/CharacterDefinitionFormView
 import { SceneDefinitionFormView } from './views/SceneDefinitionFormView';
 import { StyleDefinitionFormView } from './views/StyleDefinitionFormView';
 import { SpaceTasksView } from './views/SpaceTasksView';
+import { SpaceAssetsView } from './views/SpaceAssetsView';
 import type {
   CharacterAppearanceMetadata,
   SceneDefinitionMetadata,
@@ -48,6 +49,17 @@ export type DefinitionSummary = {
    isLocked?: boolean;
 };
 
+export type SpaceAssetSummary = {
+  id: number;
+  spaceId: number;
+  name: string;
+  type: string;
+  fileKey: string;
+  fileUrl: string;
+  metadata?: unknown | null;
+  createdAt?: string;
+};
+
 type TaskSummary = {
   id: number;
   name: string;
@@ -73,6 +85,7 @@ type Route =
   | { kind: 'dashboard' }
   | { kind: 'space'; spaceId: number }
   | { kind: 'project'; projectId: number }
+  | { kind: 'spaceAssets'; spaceId: number }
   | { kind: 'spaceNewCharacter'; spaceId: number }
   | { kind: 'spaceNewScene'; spaceId: number }
   | { kind: 'spaceNewStyle'; spaceId: number }
@@ -91,6 +104,9 @@ const parseHashRoute = (): Route => {
   if (parts[0] === 'spaces' && parts[1]) {
     const id = Number(parts[1]);
     if (Number.isFinite(id) && id > 0) {
+      if (parts[2] === 'assets') {
+        return { kind: 'spaceAssets', spaceId: id };
+      }
       if (parts[2] === 'characters') {
         if (parts[3] === 'new') {
           return { kind: 'spaceNewCharacter', spaceId: id };
@@ -157,6 +173,8 @@ const navigateTo = (route: Route): void => {
     window.location.hash = `#/spaces/${route.spaceId}`;
   } else if (route.kind === 'project') {
     window.location.hash = `#/projects/${route.projectId}`;
+  } else if (route.kind === 'spaceAssets') {
+    window.location.hash = `#/spaces/${route.spaceId}/assets`;
   } else if (route.kind === 'spaceNewCharacter') {
     window.location.hash = `#/spaces/${route.spaceId}/characters/new`;
   } else if (route.kind === 'spaceNewScene') {
@@ -257,6 +275,14 @@ function App() {
   const [projectDefinitionsLoading, setProjectDefinitionsLoading] =
     useState(false);
   const [projectDefinitionsError, setProjectDefinitionsError] = useState<
+    string | null
+  >(null);
+
+  const [spaceAssets, setSpaceAssets] = useState<SpaceAssetSummary[]>([]);
+  const [spaceAssetsLoading, setSpaceAssetsLoading] = useState(false);
+  const [spaceAssetsError, setSpaceAssetsError] = useState<string | null>(null);
+  const [uploadSpaceAssetLoading, setUploadSpaceAssetLoading] = useState(false);
+  const [uploadSpaceAssetError, setUploadSpaceAssetError] = useState<
     string | null
   >(null);
 
@@ -661,6 +687,48 @@ function App() {
     }
   };
 
+  const loadSpaceAssets = async (
+    spaceId: number,
+    type?: string,
+  ): Promise<void> => {
+    setSpaceAssetsLoading(true);
+    setSpaceAssetsError(null);
+    try {
+      const query =
+        type && type.trim().length > 0
+          ? `?type=${encodeURIComponent(type.trim())}`
+          : '';
+      const res = await fetch(`/api/spaces/${spaceId}/assets${query}`, {
+        credentials: 'include',
+      });
+      if (res.status === 401) {
+        setUser(null);
+        setSpaces([]);
+        setSpaceAssets([]);
+        return;
+      }
+      if (res.status === 404) {
+        setSpaceAssets([]);
+        setSpaceAssetsError('Space not found or not owned by this user.');
+        return;
+      }
+      if (!res.ok) {
+        throw new Error('SPACE_ASSETS_FETCH_FAILED');
+      }
+      const body = (await res.json()) as {
+        assets?: SpaceAssetSummary[];
+      };
+      setSpaceAssets(body.assets ?? []);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load space assets.';
+      setSpaceAssetsError(message);
+      setSpaceAssets([]);
+    } finally {
+      setSpaceAssetsLoading(false);
+    }
+  };
+
   useEffect(() => {
     void (async () => {
       await loadCurrentUser();
@@ -704,6 +772,7 @@ function App() {
 
     if (
       route.kind === 'space' ||
+      route.kind === 'spaceAssets' ||
       route.kind === 'spaceNewCharacter' ||
       route.kind === 'spaceNewScene' ||
       route.kind === 'spaceNewStyle' ||
@@ -726,6 +795,7 @@ function App() {
       void loadDefinitions(desiredSpaceId);
       void loadSpaceTasks(desiredSpaceId);
       void loadRenderedAssetsForSpace(desiredSpaceId);
+      void loadSpaceAssets(desiredSpaceId);
     }
   }, [isAuthenticated, selectedSpaceId, spaces, route]);
 
@@ -733,6 +803,7 @@ function App() {
   const isSpaceOverviewRoute = route.kind === 'space';
   const isSpaceContextRoute =
     route.kind === 'space' ||
+    route.kind === 'spaceAssets' ||
     route.kind === 'spaceNewCharacter' ||
     route.kind === 'spaceNewScene' ||
     route.kind === 'spaceNewStyle' ||
@@ -1417,6 +1488,113 @@ function App() {
     void loadDefinitions(spaceId);
     void loadSpaceTasks(spaceId);
     void loadRenderedAssetsForSpace(spaceId);
+  };
+
+  const handleUploadSpaceAsset = async (
+    spaceId: number,
+    payload: { name: string; type: string; file: File },
+  ): Promise<void> => {
+    if (!user) return;
+    const { name, type, file } = payload;
+
+    setUploadSpaceAssetError(null);
+    setUploadSpaceAssetLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('type', type);
+      formData.append('file', file);
+
+      const res = await fetch(`/api/spaces/${spaceId}/assets`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      const body = (await res.json().catch(() => null)) as
+        | { asset?: SpaceAssetSummary; error?: string }
+        | null;
+
+      if (!res.ok) {
+        const code = body?.error;
+        if (code === 'NAME_REQUIRED') {
+          setUploadSpaceAssetError('Asset name is required.');
+        } else if (code === 'TYPE_REQUIRED') {
+          setUploadSpaceAssetError('Asset type is required.');
+        } else if (code === 'FILE_REQUIRED') {
+          setUploadSpaceAssetError('You must select a file to upload.');
+        } else if (code === 'INVALID_ASSET_TYPE') {
+          setUploadSpaceAssetError('Invalid asset type.');
+        } else if (code === 'UNAUTHENTICATED') {
+          setUploadSpaceAssetError('You must be logged in to upload assets.');
+          setUser(null);
+          setSpaces([]);
+          setSpaceAssets([]);
+        } else {
+          setUploadSpaceAssetError('Failed to upload asset.');
+        }
+        return;
+      }
+
+      if (!body?.asset) {
+        setUploadSpaceAssetError('Asset was uploaded but not returned.');
+        return;
+      }
+
+      setSpaceAssets((prev) => [body.asset as SpaceAssetSummary, ...prev]);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to upload asset.';
+      setUploadSpaceAssetError(message);
+    } finally {
+      setUploadSpaceAssetLoading(false);
+    }
+  };
+
+  const handleDeleteSpaceAsset = async (
+    spaceId: number,
+    assetId: number,
+  ): Promise<void> => {
+    if (!user) return;
+
+    setSpaceAssetsError(null);
+
+    try {
+      const res = await fetch(`/api/spaces/${spaceId}/assets/${assetId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (res.status === 204) {
+        setSpaceAssets((prev) => prev.filter((asset) => asset.id !== assetId));
+        return;
+      }
+
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      const code = body?.error;
+
+      if (code === 'UNAUTHENTICATED') {
+        setSpaceAssetsError('You must be logged in to delete assets.');
+        setUser(null);
+        setSpaces([]);
+        setSpaceAssets([]);
+      } else if (code === 'SPACE_ASSET_NOT_FOUND') {
+        setSpaceAssetsError('Asset not found or not owned by this space.');
+      } else if (code === 'INVALID_SPACE_ID') {
+        setSpaceAssetsError('The requested space id is invalid.');
+      } else if (code === 'INVALID_ASSET_ID') {
+        setSpaceAssetsError('The requested asset id is invalid.');
+      } else {
+        setSpaceAssetsError('Failed to delete asset.');
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to delete asset.';
+      setSpaceAssetsError(message);
+    }
   };
 
   const handleCreateProject = async (event: FormEvent): Promise<void> => {
@@ -2700,6 +2878,13 @@ function App() {
                 onDeleteDefinition={handleDeleteSpaceDefinition}
                 onEditDefinition={handleEditSpaceDefinition}
                 onCloneDefinition={handleCloneSpaceDefinition}
+                onOpenAssets={() => {
+                  if (!selectedSpaceId) return;
+                  navigateTo({
+                    kind: 'spaceAssets',
+                    spaceId: selectedSpaceId,
+                  });
+                }}
               />
             )}
 
@@ -2728,6 +2913,29 @@ function App() {
                 onDeleteTask={handleDeleteTask}
               />
             )}
+
+            {route.kind === 'spaceAssets' &&
+              currentSpace &&
+              selectedSpaceId && (
+                <SpaceAssetsView
+                  spaceId={selectedSpaceId}
+                  spaceName={currentSpace.name}
+                  assets={spaceAssets}
+                  loading={spaceAssetsLoading}
+                  error={spaceAssetsError}
+                  uploadLoading={uploadSpaceAssetLoading}
+                  uploadError={uploadSpaceAssetError}
+                  onReload={(type) =>
+                    void loadSpaceAssets(selectedSpaceId, type)
+                  }
+                  onUpload={(payload) =>
+                    void handleUploadSpaceAsset(selectedSpaceId, payload)
+                  }
+                  onDelete={(assetId) =>
+                    void handleDeleteSpaceAsset(selectedSpaceId, assetId)
+                  }
+                />
+              )}
 
       {isProjectRoute && (
         <ProjectView
@@ -2779,6 +2987,7 @@ function App() {
             newCharacterName={newCharacterName}
             newCharacterDescription={newCharacterDescription}
             characterMetadata={characterMetadata}
+            spaceAssets={spaceAssets}
             setNewCharacterName={setNewCharacterName}
             setNewCharacterDescription={setNewCharacterDescription}
             setCharacterMetadata={setCharacterMetadata}
@@ -2800,6 +3009,7 @@ function App() {
             newSceneName={newSceneName}
             newSceneDescription={newSceneDescription}
             sceneMetadata={sceneMetadata}
+            spaceAssets={spaceAssets}
             setNewSceneName={setNewSceneName}
             setNewSceneDescription={setNewSceneDescription}
             setSceneMetadata={setSceneMetadata}
@@ -2821,6 +3031,7 @@ function App() {
             newStyleName={newStyleName}
             newStyleDescription={newStyleDescription}
             styleMetadata={styleMetadata}
+            spaceAssets={spaceAssets}
             setNewStyleName={setNewStyleName}
             setNewStyleDescription={setNewStyleDescription}
             setStyleMetadata={setStyleMetadata}

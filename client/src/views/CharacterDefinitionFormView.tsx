@@ -1,6 +1,8 @@
 import type { FormEvent } from 'react';
 import type { CharacterAppearanceMetadata } from '../definitionMetadata';
 import { characterAppearanceConfig } from '../config/characterAppearance';
+import type { SpaceAssetSummary } from '../App';
+import { findAssetBinding } from '../../../shared/definition_config/assetReferenceMapping.js';
 
 type CharacterDefinitionFormViewProps = {
   mode: 'create' | 'edit';
@@ -10,6 +12,7 @@ type CharacterDefinitionFormViewProps = {
   newCharacterName: string;
   newCharacterDescription: string;
   characterMetadata: CharacterAppearanceMetadata;
+  spaceAssets?: SpaceAssetSummary[];
   setNewCharacterName: (value: string) => void;
   setNewCharacterDescription: (value: string) => void;
   setCharacterMetadata: (
@@ -34,6 +37,7 @@ export function CharacterDefinitionFormView(
     newCharacterName,
     newCharacterDescription,
     characterMetadata,
+    spaceAssets = [],
     setNewCharacterName,
     setNewCharacterDescription,
     setCharacterMetadata,
@@ -133,6 +137,265 @@ export function CharacterDefinitionFormView(
                   if (category.key === 'core_identity' && prop.key === 'name') {
                     // Top-level name field already represents core_identity.name
                     return null;
+                  }
+
+                  const assetBinding = findAssetBinding(
+                    'character',
+                    category.key,
+                    prop.key,
+                  );
+
+                  if (assetBinding) {
+                    const assetType = assetBinding.assetType;
+                    const availableAssets = spaceAssets.filter(
+                      (asset) => asset.type === assetType,
+                    );
+
+                    const baseCategory =
+                      (characterMetadata as any)[
+                        assetBinding.metadataCategoryKey as keyof CharacterAppearanceMetadata
+                      ] as Record<string, unknown> | undefined;
+
+                    const rawIds =
+                      baseCategory?.[assetBinding.metadataPropertyKey] ??
+                      (assetBinding.legacyMetadataPropertyKey
+                        ? baseCategory?.[assetBinding.legacyMetadataPropertyKey]
+                        : undefined);
+
+                    let selectedIds: string[] = [];
+                    if (Array.isArray(rawIds)) {
+                      selectedIds = rawIds.map((value) => String(value));
+                    } else if (
+                      typeof rawIds === 'string' &&
+                      rawIds.trim().length > 0
+                    ) {
+                      selectedIds = [rawIds.trim()];
+                    }
+
+                    const uniqueSelectedIds = Array.from(
+                      new Set(selectedIds),
+                    );
+
+                    const selectedAssets = uniqueSelectedIds
+                      .map((id) => {
+                        const numeric = Number(id);
+                        if (!Number.isFinite(numeric)) return null;
+                        return spaceAssets.find(
+                          (asset) => asset.id === numeric,
+                        );
+                      })
+                      .filter(Boolean) as SpaceAssetSummary[];
+
+                    const handleAddAsset = (assetId: number): void => {
+                      const id = String(assetId);
+                      setCharacterMetadata((prev) => {
+                        const prevCategory =
+                          (prev as any)[
+                            assetBinding.metadataCategoryKey as keyof CharacterAppearanceMetadata
+                          ] as Record<string, unknown> | undefined;
+                        const nextCategory: Record<string, unknown> = {
+                          ...(prevCategory ?? {}),
+                        };
+                        const current =
+                          (nextCategory[
+                            assetBinding.metadataPropertyKey
+                          ] as string[] | undefined) ?? [];
+                        if (!current.includes(id)) {
+                          nextCategory[assetBinding.metadataPropertyKey] = [
+                            ...current,
+                            id,
+                          ];
+                        }
+                        if (assetBinding.legacyMetadataPropertyKey) {
+                          const existing =
+                            nextCategory[
+                              assetBinding.legacyMetadataPropertyKey
+                            ];
+                          if (
+                            typeof existing !== 'string' ||
+                            existing.trim().length === 0
+                          ) {
+                            nextCategory[
+                              assetBinding.legacyMetadataPropertyKey
+                            ] = id;
+                          }
+                        }
+                        return {
+                          ...prev,
+                          [assetBinding.metadataCategoryKey]:
+                            Object.keys(nextCategory).length > 0
+                              ? nextCategory
+                              : undefined,
+                        };
+                      });
+                    };
+
+                    const handleRemoveAsset = (assetId: number): void => {
+                      const id = String(assetId);
+                      setCharacterMetadata((prev) => {
+                        const prevCategory =
+                          (prev as any)[
+                            assetBinding.metadataCategoryKey as keyof CharacterAppearanceMetadata
+                          ] as Record<string, unknown> | undefined;
+                        const nextCategory: Record<string, unknown> = {
+                          ...(prevCategory ?? {}),
+                        };
+                        const current =
+                          (nextCategory[
+                            assetBinding.metadataPropertyKey
+                          ] as string[] | undefined) ?? [];
+                        const nextIds = current.filter(
+                          (value) => value !== id,
+                        );
+                        if (nextIds.length > 0) {
+                          nextCategory[assetBinding.metadataPropertyKey] =
+                            nextIds;
+                        } else {
+                          delete nextCategory[assetBinding.metadataPropertyKey];
+                        }
+                        if (assetBinding.legacyMetadataPropertyKey) {
+                          const legacy =
+                            nextCategory[
+                              assetBinding.legacyMetadataPropertyKey
+                            ];
+                          if (
+                            typeof legacy === 'string' &&
+                            legacy === id
+                          ) {
+                            if (nextIds[0]) {
+                              nextCategory[
+                                assetBinding.legacyMetadataPropertyKey
+                              ] = nextIds[0];
+                            } else {
+                              delete nextCategory[
+                                assetBinding.legacyMetadataPropertyKey
+                              ];
+                            }
+                          }
+                        }
+                        return {
+                          ...prev,
+                          [assetBinding.metadataCategoryKey]:
+                            Object.keys(nextCategory).length > 0
+                              ? nextCategory
+                              : undefined,
+                        };
+                      });
+                    };
+
+                    return (
+                      <div key={prop.key} style={{ marginBottom: '0.5rem' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '0.25rem',
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: 500,
+                            }}
+                          >
+                            {prop.label}
+                          </div>
+                          {availableAssets.length === 0 && (
+                            <span
+                              style={{
+                                fontSize: '0.8rem',
+                                color: '#777',
+                              }}
+                            >
+                              No matching assets in this space yet.
+                            </span>
+                          )}
+                        </div>
+                        {selectedAssets.length > 0 && (
+                          <div
+                            style={{
+                              marginBottom: '0.25rem',
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '0.35rem',
+                            }}
+                          >
+                            {selectedAssets.map((asset) => (
+                              <span
+                                key={asset.id}
+                                style={{
+                                  borderRadius: '999px',
+                                  border: '1px solid #444',
+                                  padding: '0.1rem 0.4rem',
+                                  fontSize: '0.8rem',
+                                  backgroundColor: '#222',
+                                  color: '#fff',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                }}
+                              >
+                                <span>{asset.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRemoveAsset(asset.id)
+                                  }
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    padding: 0,
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {availableAssets.length > 0 && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: '0.35rem',
+                            }}
+                          >
+                            {availableAssets.map((asset) => (
+                              <button
+                                key={asset.id}
+                                type="button"
+                                onClick={() => handleAddAsset(asset.id)}
+                                style={{
+                                  borderRadius: '999px',
+                                  border: '1px solid #ccc',
+                                  padding: '0.15rem 0.5rem',
+                                  fontSize: '0.8rem',
+                                  backgroundColor: '#f7f7f7',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {asset.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {prop.description && (
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              color: '#666',
+                              marginTop: '0.1rem',
+                            }}
+                          >
+                            {prop.description}
+                          </div>
+                        )}
+                      </div>
+                    );
                   }
 
                   const categoryValue =
