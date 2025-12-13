@@ -369,198 +369,299 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
                       style={{
                         marginTop: '0.25rem',
                         fontSize: '0.85rem',
-                        display: 'grid',
-                        gridTemplateColumns: '1.5fr 1fr',
-                        gap: '0.75rem',
                       }}
                     >
-                      <div>
-                        <div
-                          style={{
-                            fontWeight: 600,
-                            marginBottom: '0.25rem',
-                          }}
-                        >
-                          Cast & style for this task
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr',
-                            gap: '0.6rem',
-                          }}
-                        >
-                          <div>
-                            <label
-                              style={{
-                                display: 'block',
-                                marginBottom: '0.15rem',
-                              }}
-                            >
-                              Characters
-                            </label>
-                            <select
-                              multiple
-                              value={cast.characters.map(String)}
-                              onChange={(event) => {
-                                const selectedIds = Array.from(
-                                  event.target.selectedOptions,
-                                )
-                                  .map((opt) => Number(opt.value))
-                                  .filter((id) => Number.isFinite(id) && id > 0);
-                                updateCastForTask(task.id, (prev) => ({
+                      <div
+                        style={{
+                          marginBottom: '0.25rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Cast
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '0.5rem',
+                          marginBottom: '0.35rem',
+                        }}
+                      >
+                        <label>
+                          Add character:{' '}
+                          <select
+                            value=""
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              if (!val) return;
+                              const id = Number(val);
+                              updateCastForTask(task.id, (prev) => {
+                                if (prev.characters.includes(id)) {
+                                  return prev;
+                                }
+                                return {
                                   ...prev,
-                                  characters: selectedIds,
-                                }));
-                              }}
-                              style={{
-                                width: '100%',
-                                minHeight: '4.5rem',
-                              }}
-                            >
-                              {spaceCharacters.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label
-                              style={{
-                                display: 'block',
-                                marginBottom: '0.15rem',
-                              }}
-                            >
-                              Scene
-                            </label>
-                            <select
-                              value={cast.sceneId ?? ''}
-                              onChange={(event) => {
-                                const val = event.target.value;
-                                const id =
-                                  val === '' ? null : Number(event.target.value);
-                                updateCastForTask(task.id, (prev) => ({
-                                  ...prev,
-                                  sceneId:
-                                    id && Number.isFinite(id) && id > 0 ? id : null,
-                                }));
-                              }}
-                              style={{
-                                width: '100%',
-                              }}
-                            >
-                              <option value="">None</option>
-                              {spaceScenes.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label
-                              style={{
-                                display: 'block',
-                                marginBottom: '0.15rem',
-                              }}
-                            >
-                              Style
-                            </label>
-                            <select
-                              value={cast.styleId ?? ''}
-                              onChange={(event) => {
-                                const val = event.target.value;
-                                const id =
-                                  val === '' ? null : Number(event.target.value);
-                                updateCastForTask(task.id, (prev) => ({
-                                  ...prev,
-                                  styleId:
-                                    id && Number.isFinite(id) && id > 0 ? id : null,
-                                }));
-                              }}
-                              style={{
-                                width: '100%',
-                              }}
-                            >
-                              <option value="">None</option>
-                              {spaceStyles.map((style) => (
-                                <option key={style.id} value={style.id}>
-                                  {style.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label
-                              style={{
-                                display: 'block',
-                                marginBottom: '0.15rem',
-                              }}
-                            >
-                              Prompt override (optional)
-                            </label>
-                            <textarea
-                              value={cast.prompt}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                updateCastForTask(task.id, (prev) => ({
-                                  ...prev,
-                                  prompt: value,
-                                }));
-                              }}
-                              rows={3}
-                              style={{
-                                width: '100%',
-                                padding: '0.35rem',
-                              }}
-                              placeholder="Override the task description with a more detailed prompt (optional)…"
-                            />
-                          </div>
-                        </div>
+                                  characters: [...prev.characters, id],
+                                };
+                              });
+                            }}
+                            style={{ padding: '0.2rem 0.4rem' }}
+                          >
+                            <option value="">Select…</option>
+                            {spaceCharacters.map((def) => (
+                              <option key={def.id} value={def.id}>
+                                {def.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Add scene:{' '}
+                          <select
+                            value={cast.sceneId ?? ''}
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              updateCastForTask(task.id, (prev) => ({
+                                ...prev,
+                                sceneId: val ? Number(val) : null,
+                              }));
+                            }}
+                            style={{ padding: '0.2rem 0.4rem' }}
+                          >
+                            <option value="">None</option>
+                            {spaceScenes.map((def) => (
+                              <option key={def.id} value={def.id}>
+                                {def.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Add style:{' '}
+                          <select
+                            value={cast.styleId ?? ''}
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              updateCastForTask(task.id, (prev) => ({
+                                ...prev,
+                                styleId: val ? Number(val) : null,
+                              }));
+                            }}
+                            style={{ padding: '0.2rem 0.4rem' }}
+                          >
+                            <option value="">None</option>
+                            {spaceStyles.map((def) => (
+                              <option key={def.id} value={def.id}>
+                                {def.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
 
                       <div
                         style={{
                           display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.4rem',
-                          alignItems: 'flex-start',
+                          flexWrap: 'wrap',
+                          gap: '0.35rem',
+                          marginBottom: '0.35rem',
                         }}
                       >
-                        <button
-                          type="button"
-                          disabled={renderingTaskId === task.id}
-                          onClick={() =>
-                            onRenderTask({
-                              taskId: task.id,
-                              characterIds: cast.characters,
-                              sceneId: cast.sceneId,
-                              styleId: cast.styleId,
-                              prompt:
-                                cast.prompt.trim().length > 0
-                                  ? cast.prompt
-                                  : null,
-                            })
-                          }
-                          style={{
-                            padding: '0.4rem 0.9rem',
-                            borderRadius: '4px',
-                            border: 'none',
-                            backgroundColor: '#1565c0',
-                            color: '#fff',
-                            cursor:
-                              renderingTaskId === task.id
-                                ? 'default'
-                                : 'pointer',
-                          }}
-                        >
-                          {renderingTaskId === task.id
-                            ? 'Rendering…'
-                            : 'Render'}
-                        </button>
+                        {cast.characters.map((id) => {
+                          const def = spaceCharacters.find(
+                            (c) => c.id === id,
+                          );
+                          if (!def) return null;
+                          return (
+                            <span
+                              key={`char-${id}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.15rem 0.35rem',
+                                borderRadius: '999px',
+                                backgroundColor: '#eee',
+                              }}
+                            >
+                              {def.name}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCastForTask(task.id, (prev) => ({
+                                    ...prev,
+                                    characters: prev.characters.filter(
+                                      (cid) => cid !== id,
+                                    ),
+                                  }))
+                                }
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
+
+                        {cast.sceneId != null && (() => {
+                          const def = spaceScenes.find(
+                            (s) => s.id === cast.sceneId,
+                          );
+                          if (!def) return null;
+                          return (
+                            <span
+                              key="scene-pill"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.15rem 0.35rem',
+                                borderRadius: '999px',
+                                backgroundColor: '#e3f2fd',
+                              }}
+                            >
+                              {def.name}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCastForTask(task.id, (prev) => ({
+                                    ...prev,
+                                    sceneId: null,
+                                  }))
+                                }
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })()}
+
+                        {cast.styleId != null && (() => {
+                          const def = spaceStyles.find(
+                            (s) => s.id === cast.styleId,
+                          );
+                          if (!def) return null;
+                          return (
+                            <span
+                              key="style-pill"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.15rem 0.35rem',
+                                borderRadius: '999px',
+                                backgroundColor: '#f3e5f5',
+                              }}
+                            >
+                              {def.name}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCastForTask(task.id, (prev) => ({
+                                    ...prev,
+                                    styleId: null,
+                                  }))
+                                }
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })()}
                       </div>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      <div
+                        style={{
+                          marginBottom: '0.25rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Prompt
+                      </div>
+                      <div
+                        style={{
+                          padding: '0 0.5rem',
+                        }}
+                      >
+                        <textarea
+                          value={cast.prompt}
+                          onChange={(event) =>
+                            updateCastForTask(task.id, (prev) => ({
+                              ...prev,
+                              prompt: event.target.value,
+                            }))
+                          }
+                          rows={2}
+                          style={{
+                            width: '100%',
+                            padding: '0.35rem',
+                            fontSize: '0.85rem',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        marginTop: '0.5rem',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        disabled={renderingTaskId === task.id}
+                        onClick={() =>
+                          onRenderTask({
+                            taskId: task.id,
+                            characterIds: cast.characters,
+                            sceneId: cast.sceneId,
+                            styleId: cast.styleId,
+                            prompt: cast.prompt || null,
+                          })
+                        }
+                        style={{
+                          padding: '0.4rem 0.9rem',
+                          borderRadius: '4px',
+                          border: 'none',
+                          backgroundColor: '#1565c0',
+                          color: '#fff',
+                          cursor:
+                            renderingTaskId === task.id
+                              ? 'default'
+                              : 'pointer',
+                        }}
+                      >
+                        {renderingTaskId === task.id
+                          ? 'Rendering…'
+                          : 'Render'}
+                      </button>
                     </div>
 
                     {assetsForTask.length > 0 && (
