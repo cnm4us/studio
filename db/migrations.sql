@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS definitions (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  type ENUM('character', 'scene', 'style') NOT NULL,
+  type ENUM('character', 'scene', 'style', 'reference_constraint') NOT NULL,
   scope ENUM('space', 'project') NOT NULL,
   space_id INT UNSIGNED NULL,
   project_id INT UNSIGNED NULL,
@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS definitions (
   INDEX idx_definitions_root (root_id),
   INDEX idx_definitions_parent (parent_id)
 );
+
+-- Ensure definitions.type enum includes reference_constraint in existing databases.
+ALTER TABLE definitions
+  MODIFY COLUMN type ENUM('character', 'scene', 'style', 'reference_constraint') NOT NULL;
 
 -- Tasks and rendered assets for basic render pipeline
 

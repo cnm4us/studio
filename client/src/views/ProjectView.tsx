@@ -10,9 +10,11 @@ type ProjectViewProps = {
   projectCharacters: DefinitionSummary[];
   projectScenes: DefinitionSummary[];
   projectStyles: DefinitionSummary[];
+  projectReferenceConstraints: DefinitionSummary[];
   spaceCharacters: DefinitionSummary[];
   spaceScenes: DefinitionSummary[];
   spaceStyles: DefinitionSummary[];
+  spaceReferenceConstraints: DefinitionSummary[];
   tasksLoading: boolean;
   tasksError: string | null;
   tasks: any[];
@@ -39,14 +41,15 @@ type ProjectViewProps = {
     characterIds: number[];
     sceneId: number | null;
     styleId: number | null;
+    referenceConstraintId: number | null;
     prompt: string | null;
   }) => void;
   onImportSingleDefinition: (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ) => void;
   onRemoveProjectDefinition: (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ) => void;
 };
@@ -60,9 +63,11 @@ export function ProjectView(props: ProjectViewProps) {
     projectCharacters,
     projectScenes,
     projectStyles,
+    projectReferenceConstraints,
     spaceCharacters,
     spaceScenes,
     spaceStyles,
+    spaceReferenceConstraints,
     tasksLoading,
     tasksError,
     tasks,
@@ -95,6 +100,8 @@ export function ProjectView(props: ProjectViewProps) {
   const [selectedSpaceStyleId, setSelectedSpaceStyleId] = useState<
     number | ''
   >('');
+  const [selectedSpaceReferenceConstraintId, setSelectedSpaceReferenceConstraintId] =
+    useState<number | ''>('');
   const [detailsDefinition, setDetailsDefinition] =
     useState<DefinitionSummary | null>(null);
   const [selectedRenderedAsset, setSelectedRenderedAsset] = useState<any | null>(
@@ -107,6 +114,7 @@ export function ProjectView(props: ProjectViewProps) {
         characters: number[];
         sceneId: number | null;
         styleId: number | null;
+        referenceConstraintId: number | null;
         prompt: string;
       }
     >
@@ -127,6 +135,11 @@ export function ProjectView(props: ProjectViewProps) {
       .map((style) => style.parentId)
       .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
   );
+  const importedReferenceConstraintParentIds = new Set(
+    projectReferenceConstraints
+      .map((rc) => rc.parentId)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  );
 
   const availableSpaceCharacters = spaceCharacters.filter(
     (c) => !importedCharacterParentIds.has(c.id),
@@ -136,6 +149,9 @@ export function ProjectView(props: ProjectViewProps) {
   );
   const availableSpaceStyles = spaceStyles.filter(
     (style) => !importedStyleParentIds.has(style.id),
+  );
+  const availableSpaceReferenceConstraints = spaceReferenceConstraints.filter(
+    (rc) => !importedReferenceConstraintParentIds.has(rc.id),
   );
 
   useEffect(() => {
@@ -159,6 +175,7 @@ export function ProjectView(props: ProjectViewProps) {
       characters: [],
       sceneId: null,
       styleId: null,
+      referenceConstraintId: null,
       prompt: '',
     };
 
@@ -168,11 +185,13 @@ export function ProjectView(props: ProjectViewProps) {
       characters: number[];
       sceneId: number | null;
       styleId: number | null;
+      referenceConstraintId: number | null;
       prompt: string;
     }) => {
       characters: number[];
       sceneId: number | null;
       styleId: number | null;
+      referenceConstraintId: number | null;
       prompt: string;
     },
   ) => {
@@ -253,6 +272,37 @@ export function ProjectView(props: ProjectViewProps) {
 
         <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
           <label>
+            Add reference constraint:{' '}
+            <select
+              value={selectedSpaceReferenceConstraintId}
+              disabled={importLoading}
+              onChange={(event) => {
+                const val = event.target.value;
+                if (!val) {
+                  setSelectedSpaceReferenceConstraintId('');
+                  return;
+                }
+                const id = Number(val);
+                setSelectedSpaceReferenceConstraintId(id);
+                if (!importLoading) {
+                  onImportSingleDefinition('reference_constraint', id);
+                  setSelectedSpaceReferenceConstraintId('');
+                }
+              }}
+              style={{ padding: '0.2rem 0.4rem' }}
+            >
+              <option value="">Select…</option>
+              {availableSpaceReferenceConstraints.map((rc) => (
+                <option key={rc.id} value={rc.id}>
+                  {rc.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+          <label>
             Add scene:{' '}
             <select
               value={selectedSpaceSceneId}
@@ -321,7 +371,9 @@ export function ProjectView(props: ProjectViewProps) {
           paddingTop: '1rem',
         }}
       >
-        <h4 style={{ marginTop: 0 }}>Project assets (characters, scenes & styles)</h4>
+        <h4 style={{ marginTop: 0 }}>
+          Project assets (characters, scenes, styles & constraints)
+        </h4>
 
         {projectDefinitionsLoading && <p>Loading project assets…</p>}
         {projectDefinitionsError && (
@@ -338,21 +390,23 @@ export function ProjectView(props: ProjectViewProps) {
           !projectDefinitionsError &&
           projectCharacters.length === 0 &&
           projectScenes.length === 0 &&
-          projectStyles.length === 0 && (
+          projectStyles.length === 0 &&
+          projectReferenceConstraints.length === 0 && (
             <p>
-              No imported characters, scenes, or styles yet for this project. Use
-              the import controls above.
+              No imported characters, scenes, styles, or reference constraints
+              yet for this project. Use the import controls above.
             </p>
           )}
         {!projectDefinitionsLoading &&
           !projectDefinitionsError &&
           (projectCharacters.length > 0 ||
             projectScenes.length > 0 ||
-            projectStyles.length > 0) && (
+            projectStyles.length > 0 ||
+            projectReferenceConstraints.length > 0) && (
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
+                gridTemplateColumns: '1fr 1fr 1fr 1fr',
                 gap: '1rem',
                 marginBottom: '1.5rem',
               }}
@@ -575,6 +629,85 @@ export function ProjectView(props: ProjectViewProps) {
                               backgroundColor: '#c62828',
                               color: '#fff',
                               cursor: style.isLocked ? 'default' : 'pointer',
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <strong>Project reference constraints</strong>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    paddingLeft: 0,
+                    marginTop: '0.5rem',
+                  }}
+                >
+                  {projectReferenceConstraints.map((rc) => (
+                    <li
+                      key={rc.id}
+                      style={{
+                        padding: '0.4rem 0',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setDetailsDefinition(rc)}
+                            style={{
+                              fontWeight: 600,
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              margin: 0,
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {rc.name}
+                          </button>
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              color: '#777',
+                            }}
+                          >
+                            Status:{' '}
+                            {rc.isLocked ? 'Locked' : 'Not locked'}
+                          </div>
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            disabled={rc.isLocked}
+                            onClick={() =>
+                              onRemoveProjectDefinition(
+                                'reference_constraint',
+                                rc.id,
+                              )
+                            }
+                            style={{
+                              fontSize: '0.8rem',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '4px',
+                              border: 'none',
+                              backgroundColor: '#c62828',
+                              color: '#fff',
+                              cursor: rc.isLocked ? 'default' : 'pointer',
                             }}
                           >
                             Remove
@@ -914,6 +1047,29 @@ export function ProjectView(props: ProjectViewProps) {
                               ))}
                             </select>
                           </label>
+                          <label>
+                            Reference constraint:{' '}
+                            <select
+                              value={cast.referenceConstraintId ?? ''}
+                              onChange={(event) => {
+                                const val = event.target.value;
+                                updateCastForTask(task.id, (prev) => ({
+                                  ...prev,
+                                  referenceConstraintId: val
+                                    ? Number(val)
+                                    : null,
+                                }));
+                              }}
+                              style={{ padding: '0.2rem 0.4rem' }}
+                            >
+                              <option value="">None</option>
+                              {projectReferenceConstraints.map((def) => (
+                                <option key={def.id} value={def.id}>
+                                  {def.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                         </div>
 
                         <div
@@ -1045,6 +1201,45 @@ export function ProjectView(props: ProjectViewProps) {
                               </span>
                             );
                           })()}
+                          {cast.referenceConstraintId != null && (() => {
+                            const def = projectReferenceConstraints.find(
+                              (s) => s.id === cast.referenceConstraintId,
+                            );
+                            if (!def) return null;
+                            return (
+                              <span
+                                key="reference-constraint-pill"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                  padding: '0.15rem 0.35rem',
+                                  borderRadius: '999px',
+                                  backgroundColor: '#ffe0b2',
+                                }}
+                              >
+                                {def.name}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateCastForTask(task.id, (prev) => ({
+                                      ...prev,
+                                      referenceConstraintId: null,
+                                    }))
+                                  }
+                                  style={{
+                                    border: 'none',
+                                    background: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -1099,6 +1294,8 @@ export function ProjectView(props: ProjectViewProps) {
                               characterIds: cast.characters,
                               sceneId: cast.sceneId,
                               styleId: cast.styleId,
+                              referenceConstraintId:
+                                cast.referenceConstraintId,
                               prompt: cast.prompt || null,
                             })
                           }

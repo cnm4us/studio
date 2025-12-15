@@ -132,6 +132,29 @@ export type StyleDefinitionMetadata = {
   };
 };
 
+export type ReferenceConstraintMetadata = {
+  reference_constraints?: {
+    fidelity_mode?: string;
+    identity_lock?: string;
+    layout_lock?: string;
+    camera_flexibility?: string;
+    pose_flexibility?: string;
+    style_application?: string[];
+    [key: string]: string | string[] | undefined;
+  };
+  reference_images?: {
+    character_reference_image_ids?: string[];
+    scene_reference_image_ids?: string[];
+    style_reference_image_ids?: string[];
+    [key: string]: string | string[] | undefined;
+  };
+  [categoryKey: string]:
+    | {
+        [propertyKey: string]: string | string[] | undefined;
+      }
+    | undefined;
+};
+
 // Generic scene metadata: categories keyed by category key, each containing
 // property keys mapped to primitive or structured values. This mirrors how
 // sceneDefinitionConfig is organized without over-constraining shape.

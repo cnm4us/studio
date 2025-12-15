@@ -9,7 +9,7 @@ export type AssetReferenceType =
   | 'style_reference';
 
 export type AssetBinding = {
-  definitionType: 'character' | 'scene' | 'style';
+  definitionType: 'character' | 'scene' | 'style' | 'reference_constraint';
   // Category key in the definition config
   categoryKey: string;
   // Property key in the category config
@@ -79,10 +79,35 @@ export const assetReferenceBindings: AssetBinding[] = [
     metadataPropertyKey: 'style_reference_image_ids',
     assetType: 'style_reference',
   },
+  // Reference constraint-owned images
+  {
+    definitionType: 'reference_constraint',
+    categoryKey: 'reference_images',
+    propertyKey: 'character_reference_image_ids',
+    metadataCategoryKey: 'reference_images',
+    metadataPropertyKey: 'character_reference_image_ids',
+    assetType: 'character_face',
+  },
+  {
+    definitionType: 'reference_constraint',
+    categoryKey: 'reference_images',
+    propertyKey: 'scene_reference_image_ids',
+    metadataCategoryKey: 'reference_images',
+    metadataPropertyKey: 'scene_reference_image_ids',
+    assetType: 'scene_reference',
+  },
+  {
+    definitionType: 'reference_constraint',
+    categoryKey: 'reference_images',
+    propertyKey: 'style_reference_image_ids',
+    metadataCategoryKey: 'reference_images',
+    metadataPropertyKey: 'style_reference_image_ids',
+    assetType: 'style_reference',
+  },
 ];
 
 export const findAssetBinding = (
-  definitionType: 'character' | 'scene' | 'style',
+  definitionType: 'character' | 'scene' | 'style' | 'reference_constraint',
   categoryKey: string,
   propertyKey: string,
 ): AssetBinding | undefined =>
@@ -92,4 +117,3 @@ export const findAssetBinding = (
       binding.categoryKey === categoryKey &&
       binding.propertyKey === propertyKey,
   );
-

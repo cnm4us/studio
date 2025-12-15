@@ -16,6 +16,7 @@ type SpaceViewProps = {
   spaceCharacters: DefinitionSummary[];
   spaceScenes: DefinitionSummary[];
   spaceStyles: DefinitionSummary[];
+  spaceReferenceConstraints: DefinitionSummary[];
   definitionsLoading: boolean;
   definitionsError: string | null;
   deleteDefinitionLoadingId: number | null;
@@ -25,16 +26,17 @@ type SpaceViewProps = {
   onCreateCharacter: () => void;
   onCreateScene: () => void;
   onCreateStyle: () => void;
+  onCreateReferenceConstraint: () => void;
   onDeleteDefinition: (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ) => void;
   onEditDefinition: (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ) => void;
   onCloneDefinition: (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ) => void;
   onOpenAssets: () => void;
@@ -55,6 +57,7 @@ export function SpaceView(props: SpaceViewProps) {
     spaceCharacters,
     spaceScenes,
     spaceStyles,
+    spaceReferenceConstraints,
     definitionsLoading,
     definitionsError,
     deleteDefinitionLoadingId,
@@ -64,6 +67,7 @@ export function SpaceView(props: SpaceViewProps) {
     onCreateCharacter,
     onCreateScene,
     onCreateStyle,
+    onCreateReferenceConstraint,
     onDeleteDefinition,
     onEditDefinition,
     onCloneDefinition,
@@ -71,7 +75,7 @@ export function SpaceView(props: SpaceViewProps) {
   } = props;
 
   const [editing, setEditing] = useState<{
-    kind: 'character' | 'scene' | 'style';
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint';
     id: number;
     name: string;
     description: string | null;
@@ -183,7 +187,7 @@ export function SpaceView(props: SpaceViewProps) {
         }}
       >
         <h3 style={{ marginTop: 0 }}>
-          Space assets (characters, scenes & styles)
+          Space assets (characters, scenes, styles & constraints)
         </h3>
 
         <div
@@ -203,6 +207,9 @@ export function SpaceView(props: SpaceViewProps) {
           <button type="button" onClick={onCreateStyle}>
             Create style
           </button>
+          <button type="button" onClick={onCreateReferenceConstraint}>
+            Create reference constraint
+          </button>
           <button type="button" onClick={onOpenAssets}>
             Add assets
           </button>
@@ -221,21 +228,23 @@ export function SpaceView(props: SpaceViewProps) {
           !definitionsError &&
           spaceCharacters.length === 0 &&
           spaceScenes.length === 0 &&
-          spaceStyles.length === 0 && (
+          spaceStyles.length === 0 &&
+          spaceReferenceConstraints.length === 0 && (
             <p>
-              No characters, scenes, or styles yet in this space. Create some
-              above.
+              No characters, scenes, styles, or reference constraints yet in
+              this space. Create some above.
             </p>
           )}
 
         {!definitionsLoading &&
           (spaceCharacters.length > 0 ||
             spaceScenes.length > 0 ||
-            spaceStyles.length > 0) && (
+            spaceStyles.length > 0 ||
+            spaceReferenceConstraints.length > 0) && (
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
+                gridTemplateColumns: '1fr 1fr 1fr 1fr',
                 gap: '1rem',
                 marginBottom: '1rem',
               }}
@@ -729,6 +738,188 @@ export function SpaceView(props: SpaceViewProps) {
                                 }}
                               >
                                 {deleteDefinitionLoadingId === style.id
+                                  ? 'Deleting…'
+                                  : 'Delete'}
+                              </button>
+                            </>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div>
+                <strong>Reference constraints</strong>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    paddingLeft: 0,
+                    marginTop: '0.5rem',
+                  }}
+                >
+                  {spaceReferenceConstraints.map((constraint) => {
+                    const isEditing =
+                      editing?.kind === 'reference_constraint' &&
+                      editing.id === constraint.id;
+                    const currentName =
+                      isEditing && editing ? editing.name : constraint.name;
+                    const currentDescription =
+                      isEditing && editing
+                        ? editing.description ?? ''
+                        : constraint.description ?? '';
+
+                    return (
+                      <li
+                        key={constraint.id}
+                        style={{
+                          padding: '0.4rem 0',
+                          borderBottom: '1px solid #eee',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                          }}
+                        >
+                          <div>
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={currentName}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !==
+                                          'reference_constraint' ||
+                                        prev.id !== constraint.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        name: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    marginBottom: '0.25rem',
+                                  }}
+                                />
+                                <textarea
+                                  value={currentDescription}
+                                  onChange={(e) =>
+                                    setEditing((prev) => {
+                                      if (
+                                        !prev ||
+                                        prev.kind !==
+                                          'reference_constraint' ||
+                                        prev.id !== constraint.id
+                                      ) {
+                                        return prev;
+                                      }
+                                      return {
+                                        ...prev,
+                                        description: e.target.value,
+                                      };
+                                    })
+                                  }
+                                  rows={2}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.25rem',
+                                    fontSize: '0.85rem',
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontWeight: 600 }}>
+                                  {constraint.name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: '0.8rem',
+                                    color: '#777',
+                                  }}
+                                >
+                                  {constraint.isCanonical
+                                    ? 'Canonical'
+                                    : 'Draft'}
+                                  {constraint.isLocked ? ' · Locked' : ''}
+                                </div>
+                                {constraint.description && (
+                                  <div
+                                    style={{
+                                      fontSize: '0.85rem',
+                                      color: '#555',
+                                    }}
+                                  >
+                                    {constraint.description}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.25rem',
+                              alignItems: 'flex-end',
+                            }}
+                          >
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onCloneDefinition(
+                                    'reference_constraint',
+                                    constraint.id,
+                                  )
+                                }
+                                style={{ fontSize: '0.8rem' }}
+                              >
+                                Clone
+                              </button>
+                              {!constraint.isLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onEditDefinition(
+                                      'reference_constraint',
+                                      constraint.id,
+                                    )
+                                  }
+                                  style={{ fontSize: '0.8rem' }}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onDeleteDefinition(
+                                    'reference_constraint',
+                                    constraint.id,
+                                  )
+                                }
+                                disabled={
+                                  deleteDefinitionLoadingId ===
+                                    constraint.id || constraint.isLocked
+                                }
+                                style={{
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                {deleteDefinitionLoadingId === constraint.id
                                   ? 'Deleting…'
                                   : 'Delete'}
                               </button>

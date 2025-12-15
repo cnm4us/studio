@@ -7,14 +7,15 @@ import { SpaceView } from './views/SpaceView';
 import { CharacterDefinitionFormView } from './views/CharacterDefinitionFormView';
 import { SceneDefinitionFormView } from './views/SceneDefinitionFormView';
 import { StyleDefinitionFormView } from './views/StyleDefinitionFormView';
+import { ReferenceConstraintDefinitionFormView } from './views/ReferenceConstraintDefinitionFormView';
 import { SpaceTasksView } from './views/SpaceTasksView';
 import { SpaceAssetsView } from './views/SpaceAssetsView';
 import type {
   CharacterAppearanceMetadata,
   SceneDefinitionMetadata,
   StyleDefinitionMetadata,
+  ReferenceConstraintMetadata,
 } from './definitionMetadata';
-
 
 type PublicUser = {
   id: number;
@@ -37,7 +38,7 @@ export type ProjectSummary = {
 
 export type DefinitionSummary = {
   id: number;
-  type: 'character' | 'scene' | 'style';
+  type: 'character' | 'scene' | 'style' | 'reference_constraint';
   scope: 'space' | 'project';
   name: string;
   description?: string | null;
@@ -91,7 +92,16 @@ type Route =
   | { kind: 'spaceNewStyle'; spaceId: number }
   | { kind: 'spaceEditCharacter'; spaceId: number; definitionId: number }
   | { kind: 'spaceEditScene'; spaceId: number; definitionId: number }
-  | { kind: 'spaceEditStyle'; spaceId: number; definitionId: number };
+  | { kind: 'spaceEditStyle'; spaceId: number; definitionId: number }
+  | {
+      kind: 'spaceNewReferenceConstraint';
+      spaceId: number;
+    }
+  | {
+      kind: 'spaceEditReferenceConstraint';
+      spaceId: number;
+      definitionId: number;
+    };
 
 const parseHashRoute = (): Route => {
   const hash = window.location.hash.replace(/^#/, '');
@@ -152,6 +162,24 @@ const parseHashRoute = (): Route => {
           }
         }
       }
+      if (parts[2] === 'reference-constraints') {
+        if (parts[3] === 'new') {
+          return {
+            kind: 'spaceNewReferenceConstraint',
+            spaceId: id,
+          };
+        }
+        if (parts[3] && parts[4] === 'edit') {
+          const defId = Number(parts[3]);
+          if (Number.isFinite(defId) && defId > 0) {
+            return {
+              kind: 'spaceEditReferenceConstraint',
+              spaceId: id,
+              definitionId: defId,
+            };
+          }
+        }
+      }
       return { kind: 'space', spaceId: id };
     }
   }
@@ -187,6 +215,10 @@ const navigateTo = (route: Route): void => {
     window.location.hash = `#/spaces/${route.spaceId}/scenes/${route.definitionId}/edit`;
   } else if (route.kind === 'spaceEditStyle') {
     window.location.hash = `#/spaces/${route.spaceId}/styles/${route.definitionId}/edit`;
+  } else if (route.kind === 'spaceNewReferenceConstraint') {
+    window.location.hash = `#/spaces/${route.spaceId}/reference-constraints/new`;
+  } else if (route.kind === 'spaceEditReferenceConstraint') {
+    window.location.hash = `#/spaces/${route.spaceId}/reference-constraints/${route.definitionId}/edit`;
   }
 };
 
@@ -242,6 +274,9 @@ function App() {
     [],
   );
   const [spaceScenes, setSpaceScenes] = useState<DefinitionSummary[]>([]);
+  const [spaceReferenceConstraints, setSpaceReferenceConstraints] = useState<
+    DefinitionSummary[]
+  >([]);
   const [definitionsLoading, setDefinitionsLoading] = useState(false);
   const [definitionsError, setDefinitionsError] = useState<string | null>(null);
   const [newCharacterName, setNewCharacterName] = useState('');
@@ -266,12 +301,20 @@ function App() {
     useState<StyleDefinitionMetadata>({});
   const [sceneMetadata, setSceneMetadata] =
     useState<SceneDefinitionMetadata>({});
+  const [newReferenceConstraintName, setNewReferenceConstraintName] =
+    useState('');
+  const [newReferenceConstraintDescription, setNewReferenceConstraintDescription] =
+    useState('');
+  const [referenceConstraintMetadata, setReferenceConstraintMetadata] =
+    useState<ReferenceConstraintMetadata>({});
 
   const [projectCharacters, setProjectCharacters] = useState<
     DefinitionSummary[]
   >([]);
   const [projectScenes, setProjectScenes] = useState<DefinitionSummary[]>([]);
   const [projectStyles, setProjectStyles] = useState<DefinitionSummary[]>([]);
+  const [projectReferenceConstraints, setProjectReferenceConstraints] =
+    useState<DefinitionSummary[]>([]);
   const [projectDefinitionsLoading, setProjectDefinitionsLoading] =
     useState(false);
   const [projectDefinitionsError, setProjectDefinitionsError] = useState<
@@ -292,6 +335,8 @@ function App() {
   >(null);
   const [cloneSceneFromId, setCloneSceneFromId] = useState<number | null>(null);
   const [cloneStyleFromId, setCloneStyleFromId] = useState<number | null>(null);
+  const [cloneReferenceConstraintFromId, setCloneReferenceConstraintFromId] =
+    useState<number | null>(null);
 
   const [route, setRoute] = useState<Route>(() => parseHashRoute());
 
@@ -401,22 +446,30 @@ function App() {
     setProjectDefinitionsLoading(true);
     setProjectDefinitionsError(null);
     try {
-      const [charsRes, scenesRes, stylesRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}/definitions/characters`, {
-          credentials: 'include',
-        }),
-        fetch(`/api/projects/${projectId}/definitions/scenes`, {
-          credentials: 'include',
-        }),
-        fetch(`/api/projects/${projectId}/definitions/styles`, {
-          credentials: 'include',
-        }),
-      ]);
+      const [charsRes, scenesRes, stylesRes, constraintsRes] =
+        await Promise.all([
+          fetch(`/api/projects/${projectId}/definitions/characters`, {
+            credentials: 'include',
+          }),
+          fetch(`/api/projects/${projectId}/definitions/scenes`, {
+            credentials: 'include',
+          }),
+          fetch(`/api/projects/${projectId}/definitions/styles`, {
+            credentials: 'include',
+          }),
+          fetch(
+            `/api/projects/${projectId}/definitions/reference-constraints`,
+            {
+              credentials: 'include',
+            },
+          ),
+        ]);
 
       if (
         charsRes.status === 401 ||
         scenesRes.status === 401 ||
-        stylesRes.status === 401
+        stylesRes.status === 401 ||
+        constraintsRes.status === 401
       ) {
         setUser(null);
         setSpaces([]);
@@ -425,24 +478,32 @@ function App() {
         setProjectCharacters([]);
         setProjectScenes([]);
         setProjectStyles([]);
+        setProjectReferenceConstraints([]);
         return;
       }
 
       if (
         charsRes.status === 404 ||
         scenesRes.status === 404 ||
-        stylesRes.status === 404
+        stylesRes.status === 404 ||
+        constraintsRes.status === 404
       ) {
         setProjectCharacters([]);
         setProjectScenes([]);
         setProjectStyles([]);
+        setProjectReferenceConstraints([]);
         setProjectDefinitionsError(
           'Project not found or not owned by this user.',
         );
         return;
       }
 
-      if (!charsRes.ok || !scenesRes.ok || !stylesRes.ok) {
+      if (
+        !charsRes.ok ||
+        !scenesRes.ok ||
+        !stylesRes.ok ||
+        !constraintsRes.ok
+      ) {
         throw new Error('PROJECT_DEFINITIONS_FETCH_FAILED');
       }
 
@@ -455,10 +516,16 @@ function App() {
       const stylesBody = (await stylesRes.json()) as {
         styles: DefinitionSummary[];
       };
+      const constraintsBody = (await constraintsRes.json()) as {
+        referenceConstraints: DefinitionSummary[];
+      };
 
       setProjectCharacters(charsBody.characters ?? []);
       setProjectScenes(scenesBody.scenes ?? []);
       setProjectStyles(stylesBody.styles ?? []);
+      setProjectReferenceConstraints(
+        constraintsBody.referenceConstraints ?? [],
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load project assets.';
@@ -466,6 +533,7 @@ function App() {
       setProjectCharacters([]);
       setProjectScenes([]);
       setProjectStyles([]);
+      setProjectReferenceConstraints([]);
     } finally {
       setProjectDefinitionsLoading(false);
     }
@@ -621,7 +689,7 @@ function App() {
     setDefinitionsLoading(true);
     setDefinitionsError(null);
     try {
-      const [charsRes, scenesRes, stylesRes] = await Promise.all([
+      const [charsRes, scenesRes, stylesRes, constraintsRes] = await Promise.all([
         fetch(`/api/spaces/${spaceId}/characters`, {
           credentials: 'include',
         }),
@@ -631,34 +699,46 @@ function App() {
         fetch(`/api/spaces/${spaceId}/styles`, {
           credentials: 'include',
         }),
+        fetch(`/api/spaces/${spaceId}/reference-constraints`, {
+          credentials: 'include',
+        }),
       ]);
 
       if (
         charsRes.status === 401 ||
         scenesRes.status === 401 ||
-        stylesRes.status === 401
+        stylesRes.status === 401 ||
+        constraintsRes.status === 401
       ) {
         setUser(null);
         setSpaces([]);
         setSpaceCharacters([]);
         setSpaceScenes([]);
         setSpaceStyles([]);
+        setSpaceReferenceConstraints([]);
         return;
       }
 
       if (
         charsRes.status === 404 ||
         scenesRes.status === 404 ||
-        stylesRes.status === 404
+        stylesRes.status === 404 ||
+        constraintsRes.status === 404
       ) {
         setSpaceCharacters([]);
         setSpaceScenes([]);
         setSpaceStyles([]);
+        setSpaceReferenceConstraints([]);
         setDefinitionsError('Space not found or not owned by this user.');
         return;
       }
 
-      if (!charsRes.ok || !scenesRes.ok || !stylesRes.ok) {
+      if (
+        !charsRes.ok ||
+        !scenesRes.ok ||
+        !stylesRes.ok ||
+        !constraintsRes.ok
+      ) {
         throw new Error('DEFINITIONS_FETCH_FAILED');
       }
 
@@ -671,10 +751,16 @@ function App() {
       const stylesBody = (await stylesRes.json()) as {
         styles: DefinitionSummary[];
       };
+      const constraintsBody = (await constraintsRes.json()) as {
+        referenceConstraints: DefinitionSummary[];
+      };
 
       setSpaceCharacters(charsBody.characters ?? []);
       setSpaceScenes(scenesBody.scenes ?? []);
       setSpaceStyles(stylesBody.styles ?? []);
+      setSpaceReferenceConstraints(
+        constraintsBody.referenceConstraints ?? [],
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load definitions.';
@@ -682,6 +768,7 @@ function App() {
       setSpaceCharacters([]);
       setSpaceScenes([]);
       setSpaceStyles([]);
+      setSpaceReferenceConstraints([]);
     } finally {
       setDefinitionsLoading(false);
     }
@@ -750,6 +837,9 @@ function App() {
       setProjectCharacters([]);
       setProjectScenes([]);
       setSpaceStyles([]);
+      setSpaceReferenceConstraints([]);
+      setProjectStyles([]);
+      setProjectReferenceConstraints([]);
     }
   }, [user]);
 
@@ -778,7 +868,9 @@ function App() {
       route.kind === 'spaceNewStyle' ||
       route.kind === 'spaceEditCharacter' ||
       route.kind === 'spaceEditScene' ||
-      route.kind === 'spaceEditStyle'
+      route.kind === 'spaceEditStyle' ||
+      route.kind === 'spaceNewReferenceConstraint' ||
+      route.kind === 'spaceEditReferenceConstraint'
     ) {
       desiredSpaceId = route.spaceId;
     } else if (selectedSpaceId) {
@@ -809,7 +901,9 @@ function App() {
     route.kind === 'spaceNewStyle' ||
     route.kind === 'spaceEditCharacter' ||
     route.kind === 'spaceEditScene' ||
-    route.kind === 'spaceEditStyle';
+    route.kind === 'spaceEditStyle' ||
+    route.kind === 'spaceNewReferenceConstraint' ||
+    route.kind === 'spaceEditReferenceConstraint';
   const isProjectRoute = route.kind === 'project';
 
   const currentSpace =
@@ -828,6 +922,10 @@ function App() {
   const isEditSceneRoute = route.kind === 'spaceEditScene';
   const isCreateStyleRoute = route.kind === 'spaceNewStyle';
   const isEditStyleRoute = route.kind === 'spaceEditStyle';
+  const isCreateReferenceConstraintRoute =
+    route.kind === 'spaceNewReferenceConstraint';
+  const isEditReferenceConstraintRoute =
+    route.kind === 'spaceEditReferenceConstraint';
 
   // Debug: log route and selection to help diagnose project/task view issues.
   // eslint-disable-next-line no-console
@@ -932,6 +1030,7 @@ function App() {
             setSpaceCharacters([]);
             setSpaceScenes([]);
             setSpaceStyles([]);
+            setSpaceReferenceConstraints([]);
             return;
           }
 
@@ -1002,6 +1101,7 @@ function App() {
             setSpaceCharacters([]);
             setSpaceScenes([]);
             setSpaceStyles([]);
+            setSpaceReferenceConstraints([]);
             return;
           }
 
@@ -1060,6 +1160,7 @@ function App() {
             setSpaceCharacters([]);
             setSpaceScenes([]);
             setSpaceStyles([]);
+            setSpaceReferenceConstraints([]);
             return;
           }
 
@@ -1104,13 +1205,76 @@ function App() {
         } catch {
           // Swallow; user can retry by reloading.
         }
+      } else if (route.kind === 'spaceEditReferenceConstraint') {
+        const { spaceId, definitionId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/reference-constraints/${definitionId}`,
+            { credentials: 'include' },
+          );
+
+          if (res.status === 401) {
+            setUser(null);
+            setSpaces([]);
+            setSpaceCharacters([]);
+            setSpaceScenes([]);
+            setSpaceStyles([]);
+            setSpaceReferenceConstraints([]);
+            return;
+          }
+
+          if (!res.ok) {
+            return;
+          }
+
+          const body = (await res.json().catch(() => null)) as
+            | {
+                referenceConstraint?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: ReferenceConstraintMetadata | null;
+                };
+              }
+            | null;
+
+          const constraint = body?.referenceConstraint;
+          if (!constraint) {
+            return;
+          }
+
+          setNewReferenceConstraintName(constraint.name ?? '');
+          setNewReferenceConstraintDescription(
+            constraint.description ?? '',
+          );
+
+          let incomingMetadata: ReferenceConstraintMetadata = {};
+          const rawMetadata = constraint.metadata as unknown;
+          if (rawMetadata) {
+            if (typeof rawMetadata === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  rawMetadata,
+                ) as ReferenceConstraintMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof rawMetadata === 'object') {
+              incomingMetadata =
+                rawMetadata as ReferenceConstraintMetadata;
+            }
+          }
+          setReferenceConstraintMetadata(incomingMetadata);
+        } catch {
+          // Swallow; user can retry by reloading.
+        }
       }
     };
 
     if (
       route.kind === 'spaceEditCharacter' ||
       route.kind === 'spaceEditScene' ||
-      route.kind === 'spaceEditStyle'
+      route.kind === 'spaceEditStyle' ||
+      route.kind === 'spaceEditReferenceConstraint'
     ) {
       void loadForEdit();
     }
@@ -1131,6 +1295,9 @@ function App() {
     setNewStyleName,
     setNewStyleDescription,
     setStyleMetadata,
+    setNewReferenceConstraintName,
+    setNewReferenceConstraintDescription,
+    setReferenceConstraintMetadata,
   ]);
 
   // Prefill "new" definition forms when cloning from an existing space definition.
@@ -1314,6 +1481,66 @@ function App() {
         } finally {
           setCloneStyleFromId(null);
         }
+      } else if (
+        route.kind === 'spaceNewReferenceConstraint' &&
+        cloneReferenceConstraintFromId
+      ) {
+        const { spaceId } = route;
+        try {
+          const res = await fetch(
+            `/api/spaces/${spaceId}/reference-constraints/${cloneReferenceConstraintFromId}`,
+            { credentials: 'include' },
+          );
+          if (!res.ok) {
+            setCloneReferenceConstraintFromId(null);
+            return;
+          }
+          const body = (await res.json().catch(() => null)) as
+            | {
+                referenceConstraint?: {
+                  name?: string;
+                  description?: string | null;
+                  metadata?: ReferenceConstraintMetadata | null;
+                };
+              }
+            | null;
+          const constraint = body?.referenceConstraint;
+          if (!constraint) {
+            setCloneReferenceConstraintFromId(null);
+            return;
+          }
+
+          const baseName = constraint.name ?? '';
+          setNewReferenceConstraintName(
+            baseName && !baseName.toLowerCase().includes('clone')
+              ? `${baseName} (clone)`
+              : baseName,
+          );
+          setNewReferenceConstraintDescription(
+            constraint.description ?? '',
+          );
+
+          let incomingMetadata: ReferenceConstraintMetadata = {};
+          const raw = constraint.metadata as unknown;
+          if (raw) {
+            if (typeof raw === 'string') {
+              try {
+                incomingMetadata = JSON.parse(
+                  raw,
+                ) as ReferenceConstraintMetadata;
+              } catch {
+                incomingMetadata = {};
+              }
+            } else if (typeof raw === 'object') {
+              incomingMetadata = raw as ReferenceConstraintMetadata;
+            }
+          }
+          setReferenceConstraintMetadata(incomingMetadata);
+        } catch {
+          // ignore
+        } finally {
+          setCloneReferenceConstraintFromId(null);
+        }
       }
     };
 
@@ -1324,6 +1551,7 @@ function App() {
     cloneCharacterFromId,
     cloneSceneFromId,
     cloneStyleFromId,
+    cloneReferenceConstraintFromId,
     setNewCharacterName,
     setNewCharacterDescription,
     setCharacterMetadata,
@@ -1333,6 +1561,9 @@ function App() {
     setNewStyleName,
     setNewStyleDescription,
     setStyleMetadata,
+    setNewReferenceConstraintName,
+    setNewReferenceConstraintDescription,
+    setReferenceConstraintMetadata,
   ]);
 
   const handleAuthSubmit = async (event: FormEvent): Promise<void> => {
@@ -1665,7 +1896,7 @@ function App() {
   };
 
   const handleCloneSpaceDefinition = (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ): void => {
     if (!selectedSpaceId) return;
@@ -1682,12 +1913,18 @@ function App() {
         kind: 'spaceNewScene',
         spaceId: selectedSpaceId,
       });
-    } else {
+    } else if (kind === 'style') {
       setCloneStyleFromId(definitionId);
       navigateTo({
         kind: 'spaceNewStyle',
         spaceId: selectedSpaceId,
       });
+    } else {
+      navigateTo({
+        kind: 'spaceNewReferenceConstraint',
+        spaceId: selectedSpaceId,
+      });
+      setCloneReferenceConstraintFromId(definitionId);
     }
   };
 
@@ -1991,8 +2228,159 @@ function App() {
     }
   };
 
+  const handleCreateReferenceConstraintDefinition = async (
+    event: FormEvent,
+  ): Promise<void> => {
+    event.preventDefault();
+    if (!user || !selectedSpaceId) return;
+
+    setCreateDefinitionLoading(true);
+
+    try {
+      const metadata: ReferenceConstraintMetadata | null =
+        Object.keys(referenceConstraintMetadata).length > 0
+          ? referenceConstraintMetadata
+          : null;
+
+      const isEdit = route.kind === 'spaceEditReferenceConstraint';
+      let url = `/api/spaces/${selectedSpaceId}/reference-constraints`;
+      let method: 'POST' | 'PATCH' = 'POST';
+
+      if (isEdit) {
+        const definitionId =
+          route.kind === 'spaceEditReferenceConstraint'
+            ? route.definitionId
+            : null;
+        if (definitionId) {
+          url = `/api/spaces/${selectedSpaceId}/reference-constraints/${definitionId}`;
+          method = 'PATCH';
+        }
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: newReferenceConstraintName,
+          description: newReferenceConstraintDescription || null,
+          metadata,
+        }),
+      });
+
+      if (method === 'PATCH') {
+        if (res.status === 204) {
+          setNewReferenceConstraintName('');
+          setNewReferenceConstraintDescription('');
+          setReferenceConstraintMetadata({});
+
+          if (selectedSpaceId) {
+            void loadDefinitions(selectedSpaceId);
+            navigateTo({ kind: 'space', spaceId: selectedSpaceId });
+          }
+          return;
+        }
+
+        const body = (await res
+          .json()
+          .catch(() => null)) as { error?: string } | null;
+        const code = body?.error;
+
+        if (code === 'DEFINITION_LOCKED') {
+          setDeleteDefinitionError(
+            'This definition is locked because it has been imported into a project.',
+          );
+        } else if (code === 'DEFINITION_NOT_FOUND') {
+          setDeleteDefinitionError('Definition not found.');
+        } else if (code === 'UNAUTHENTICATED') {
+          setDeleteDefinitionError(
+            'You must be logged in to edit definitions.',
+          );
+          setUser(null);
+          setSpaces([]);
+          setSpaceCharacters([]);
+          setSpaceScenes([]);
+          setSpaceStyles([]);
+          setSpaceReferenceConstraints([]);
+        } else if (code === 'INVALID_DEFINITION_ID') {
+          setDeleteDefinitionError('The requested definition id is invalid.');
+        } else if (code === 'NAME_REQUIRED') {
+          setDeleteDefinitionError('A non-empty name is required.');
+        } else if (code === 'NO_FIELDS_TO_UPDATE') {
+          // no-op
+        } else {
+          setDeleteDefinitionError('Failed to edit definition.');
+        }
+        return;
+      }
+
+      const body = (await res.json().catch(() => null)) as
+        | {
+            referenceConstraint?: DefinitionSummary;
+            error?: string;
+          }
+        | null;
+
+      if (!res.ok) {
+        const code = body?.error;
+        if (code === 'NAME_REQUIRED') {
+          // validation already enforced
+        } else if (code === 'UNAUTHENTICATED') {
+          setUser(null);
+          setSpaces([]);
+          setSpaceCharacters([]);
+          setSpaceScenes([]);
+          setSpaceStyles([]);
+          setSpaceReferenceConstraints([]);
+        } else if (code === 'SPACE_NOT_FOUND') {
+          // space no longer accessible
+        } else {
+          // eslint-disable-next-line no-console
+          console.error(
+            '[reference-constraints] Create constraint error code:',
+            code,
+          );
+        }
+        return;
+      }
+
+      if (body?.referenceConstraint) {
+        setSpaceReferenceConstraints((prev) => [
+          body.referenceConstraint as DefinitionSummary,
+          ...prev,
+        ]);
+        setNewReferenceConstraintName('');
+        setNewReferenceConstraintDescription('');
+        setReferenceConstraintMetadata({});
+
+        if (selectedSpaceId) {
+          navigateTo({ kind: 'space', spaceId: selectedSpaceId });
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.error(
+          'Reference constraint was created but not returned.',
+        );
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to create reference constraint.';
+      // eslint-disable-next-line no-console
+      console.error(
+        '[reference-constraints] Create constraint error:',
+        message,
+      );
+    } finally {
+      setCreateDefinitionLoading(false);
+    }
+  };
+
   const handleDeleteSpaceDefinition = async (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ): Promise<void> => {
     if (!user || !selectedSpaceId) return;
@@ -2006,7 +2394,9 @@ function App() {
           ? 'characters'
           : kind === 'scene'
           ? 'scenes'
-          : 'styles';
+          : kind === 'style'
+          ? 'styles'
+          : 'reference-constraints';
 
       const res = await fetch(
         `/api/spaces/${selectedSpaceId}/${pathSegment}/${definitionId}`,
@@ -2025,8 +2415,12 @@ function App() {
           setSpaceScenes((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
-        } else {
+        } else if (kind === 'style') {
           setSpaceStyles((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        } else {
+          setSpaceReferenceConstraints((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
         }
@@ -2053,6 +2447,7 @@ function App() {
         setSpaceCharacters([]);
         setSpaceScenes([]);
         setSpaceStyles([]);
+        setSpaceReferenceConstraints([]);
       } else if (code === 'INVALID_DEFINITION_ID') {
         setDeleteDefinitionError('The requested definition id is invalid.');
       } else {
@@ -2068,7 +2463,7 @@ function App() {
   };
 
   const handleEditSpaceDefinition = (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ): void => {
     if (!selectedSpaceId) return;
@@ -2085,9 +2480,15 @@ function App() {
         spaceId: selectedSpaceId,
         definitionId,
       });
-    } else {
+    } else if (kind === 'style') {
       navigateTo({
         kind: 'spaceEditStyle',
+        spaceId: selectedSpaceId,
+        definitionId,
+      });
+    } else {
+      navigateTo({
+        kind: 'spaceEditReferenceConstraint',
         spaceId: selectedSpaceId,
         definitionId,
       });
@@ -2112,9 +2513,18 @@ function App() {
     try {
       const characterIds = spaceCharacters.map((c) => c.id);
       const sceneIds = spaceScenes.map((s) => s.id);
+      const referenceConstraintIds = spaceReferenceConstraints.map(
+        (c) => c.id,
+      );
 
-      if (characterIds.length === 0 && sceneIds.length === 0) {
-        setImportError('No space-level characters or scenes to import.');
+      if (
+        characterIds.length === 0 &&
+        sceneIds.length === 0 &&
+        referenceConstraintIds.length === 0
+      ) {
+        setImportError(
+          'No space-level characters, scenes, or reference constraints to import.',
+        );
         setImportLoading(false);
         return;
       }
@@ -2126,6 +2536,7 @@ function App() {
         body: JSON.stringify({
           characters: characterIds,
           scenes: sceneIds,
+          referenceConstraints: referenceConstraintIds,
         }),
       });
 
@@ -2134,6 +2545,7 @@ function App() {
             imported?: {
               characters?: DefinitionSummary[];
               scenes?: DefinitionSummary[];
+              referenceConstraints?: DefinitionSummary[];
             };
             error?: string;
           }
@@ -2179,7 +2591,7 @@ function App() {
   };
 
   const handleImportSingleDefinition = (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ): void => {
     const projectIdForImport =
@@ -2199,14 +2611,17 @@ function App() {
           characters?: number[];
           scenes?: number[];
           styles?: number[];
+          referenceConstraints?: number[];
         } = {};
 
         if (kind === 'character') {
           payload.characters = [definitionId];
         } else if (kind === 'scene') {
           payload.scenes = [definitionId];
-        } else {
+        } else if (kind === 'style') {
           payload.styles = [definitionId];
+        } else {
+          payload.referenceConstraints = [definitionId];
         }
 
         const res = await fetch(
@@ -2269,7 +2684,7 @@ function App() {
   };
 
   const handleDeleteProjectDefinition = async (
-    kind: 'character' | 'scene' | 'style',
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ): Promise<void> => {
     const projectIdForDelete =
@@ -2284,7 +2699,15 @@ function App() {
 
     try {
       const res = await fetch(
-        `/api/projects/${projectIdForDelete}/definitions/${kind === 'character' ? 'characters' : kind === 'scene' ? 'scenes' : 'styles'}/${definitionId}`,
+        `/api/projects/${projectIdForDelete}/definitions/${
+          kind === 'character'
+            ? 'characters'
+            : kind === 'scene'
+            ? 'scenes'
+            : kind === 'style'
+            ? 'styles'
+            : 'reference-constraints'
+        }/${definitionId}`,
         {
           method: 'DELETE',
           credentials: 'include',
@@ -2300,8 +2723,12 @@ function App() {
           setProjectScenes((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
-        } else {
+        } else if (kind === 'style') {
           setProjectStyles((prev) =>
+            prev.filter((definition) => definition.id !== definitionId),
+          );
+        } else {
+          setProjectReferenceConstraints((prev) =>
             prev.filter((definition) => definition.id !== definitionId),
           );
         }
@@ -2423,11 +2850,19 @@ function App() {
     characterIds: number[];
     sceneId: number | null;
     styleId: number | null;
+    referenceConstraintId: number | null;
     prompt: string | null;
   }): Promise<void> => {
     if (!user) return;
 
-    const { taskId, characterIds, sceneId, styleId, prompt } = params;
+    const {
+      taskId,
+      characterIds,
+      sceneId,
+      styleId,
+      referenceConstraintId,
+      prompt,
+    } = params;
 
     setRenderError(null);
     setRenderingTaskId(taskId);
@@ -2442,6 +2877,7 @@ function App() {
           styleDefinitionId: styleId ?? null,
           characterDefinitionIds: characterIds ?? [],
           sceneDefinitionId: sceneId ?? null,
+          referenceConstraintDefinitionId: referenceConstraintId ?? null,
         }),
       });
 
@@ -2845,6 +3281,7 @@ function App() {
                 spaceCharacters={spaceCharacters}
                 spaceScenes={spaceScenes}
                 spaceStyles={spaceStyles}
+                spaceReferenceConstraints={spaceReferenceConstraints}
                 definitionsLoading={definitionsLoading}
                 definitionsError={definitionsError}
                 deleteDefinitionLoadingId={deleteDefinitionLoadingId}
@@ -2875,6 +3312,13 @@ function App() {
                     spaceId: selectedSpaceId,
                   });
                 }}
+                onCreateReferenceConstraint={() => {
+                  if (!selectedSpaceId) return;
+                  navigateTo({
+                    kind: 'spaceNewReferenceConstraint',
+                    spaceId: selectedSpaceId,
+                  });
+                }}
                 onDeleteDefinition={handleDeleteSpaceDefinition}
                 onEditDefinition={handleEditSpaceDefinition}
                 onCloneDefinition={handleCloneSpaceDefinition}
@@ -2893,6 +3337,7 @@ function App() {
                 spaceCharacters={spaceCharacters}
                 spaceScenes={spaceScenes}
                 spaceStyles={spaceStyles}
+                spaceReferenceConstraints={spaceReferenceConstraints}
                 tasksLoading={tasksLoading}
                 tasksError={tasksError}
                 tasks={tasks}
@@ -2946,9 +3391,11 @@ function App() {
                 projectCharacters={projectCharacters}
                 projectScenes={projectScenes}
                 projectStyles={projectStyles}
+                projectReferenceConstraints={projectReferenceConstraints}
                 spaceCharacters={spaceCharacters}
                 spaceScenes={spaceScenes}
                 spaceStyles={spaceStyles}
+                spaceReferenceConstraints={spaceReferenceConstraints}
                 tasksLoading={tasksLoading}
                 tasksError={tasksError}
                 tasks={tasks}
@@ -3036,6 +3483,32 @@ function App() {
             setNewStyleDescription={setNewStyleDescription}
             setStyleMetadata={setStyleMetadata}
             onSubmit={(e) => void handleCreateStyleDefinition(e)}
+            onCancel={() =>
+              navigateTo({ kind: 'space', spaceId: selectedSpaceId })
+            }
+          />
+        )}
+
+      {(isCreateReferenceConstraintRoute || isEditReferenceConstraintRoute) &&
+        currentSpace &&
+        selectedSpaceId && (
+          <ReferenceConstraintDefinitionFormView
+            mode={isEditReferenceConstraintRoute ? 'edit' : 'create'}
+            spaceName={currentSpace.name}
+            selectedSpaceId={selectedSpaceId}
+            createDefinitionLoading={createDefinitionLoading}
+            newConstraintName={newReferenceConstraintName}
+            newConstraintDescription={newReferenceConstraintDescription}
+            constraintMetadata={referenceConstraintMetadata}
+            spaceAssets={spaceAssets}
+            setNewConstraintName={setNewReferenceConstraintName}
+            setNewConstraintDescription={
+              setNewReferenceConstraintDescription
+            }
+            setConstraintMetadata={setReferenceConstraintMetadata}
+            onSubmit={(e) =>
+              void handleCreateReferenceConstraintDefinition(e)
+            }
             onCancel={() =>
               navigateTo({ kind: 'space', spaceId: selectedSpaceId })
             }

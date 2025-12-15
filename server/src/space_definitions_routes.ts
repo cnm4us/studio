@@ -652,4 +652,213 @@ router.delete(
   },
 );
 
+router.get(
+  '/reference-constraints',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const definitions = await listSpaceDefinitions(
+      space.id,
+      'reference_constraint',
+    );
+    res.status(200).json({ referenceConstraints: definitions });
+  },
+);
+
+router.get(
+  '/reference-constraints/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id, name, description, metadata
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'reference_constraint'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as Array<{
+      id: number;
+      name: string;
+      description: string | null;
+      metadata: unknown | null;
+    }>;
+
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    res.status(200).json({ referenceConstraint: list[0] });
+  },
+);
+
+router.post(
+  '/reference-constraints',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { name, description, metadata } = req.body as {
+      name?: string;
+      description?: string | null;
+      metadata?: unknown;
+    };
+
+    if (!name || name.trim().length === 0) {
+      res.status(400).json({ error: 'NAME_REQUIRED' });
+      return;
+    }
+
+    try {
+      const definition = await createSpaceDefinition(
+        space.id,
+        'reference_constraint',
+        name.trim(),
+        description ?? null,
+        metadata ?? null,
+      );
+      res.status(201).json({ referenceConstraint: definition });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[definitions] Create reference constraint error:', error);
+      res.status(500).json({ error: 'REFERENCE_CONSTRAINT_CREATE_FAILED' });
+    }
+  },
+);
+
+router.patch(
+  '/reference-constraints/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'reference_constraint'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as { id: number }[];
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    const locked = await isSpaceDefinitionLockedForDelete(list[0].id);
+    if (locked) {
+      res.status(409).json({ error: 'DEFINITION_LOCKED' });
+      return;
+    }
+
+    const { name, description, metadata } = req.body as {
+      name?: string;
+      description?: string | null;
+      metadata?: unknown;
+    };
+
+    const updates: string[] = [];
+    const params: unknown[] = [];
+
+    if (typeof name === 'string') {
+      const trimmed = name.trim();
+      if (trimmed.length === 0) {
+        res.status(400).json({ error: 'NAME_REQUIRED' });
+        return;
+      }
+      updates.push('name = ?');
+      params.push(trimmed);
+    }
+
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description);
+    }
+
+    if (metadata !== undefined) {
+      updates.push('metadata = ?');
+      params.push(metadata ? JSON.stringify(metadata) : null);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ error: 'NO_FIELDS_TO_UPDATE' });
+      return;
+    }
+
+    await db.query(
+      `UPDATE definitions SET ${updates.join(', ')} WHERE id = ?`,
+      [...params, list[0].id],
+    );
+
+    res.status(204).end();
+  },
+);
+
+router.delete(
+  '/reference-constraints/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const space = await loadOwnedSpaceOr404(req, res);
+    if (!space) {
+      return;
+    }
+
+    const { definitionId } = req.params as { definitionId?: string };
+    const numericId = definitionId ? Number(definitionId) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+      res.status(400).json({ error: 'INVALID_DEFINITION_ID' });
+      return;
+    }
+
+    const db = getDbPool();
+    const [rows] = await db.query(
+      `SELECT id
+       FROM definitions
+       WHERE id = ? AND space_id = ? AND scope = 'space' AND type = 'reference_constraint'
+       LIMIT 1`,
+      [numericId, space.id],
+    );
+    const list = rows as { id: number }[];
+    if (list.length === 0) {
+      res.status(404).json({ error: 'DEFINITION_NOT_FOUND' });
+      return;
+    }
+
+    const locked = await isSpaceDefinitionLockedForDelete(list[0].id);
+    if (locked) {
+      res.status(409).json({ error: 'DEFINITION_LOCKED' });
+      return;
+    }
+
+    await db.query('DELETE FROM definitions WHERE id = ?', [list[0].id]);
+    res.status(204).end();
+  },
+);
+
 export { router as spaceDefinitionsRouter };

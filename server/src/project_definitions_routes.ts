@@ -112,10 +112,37 @@ router.get(
   },
 );
 
+router.get(
+  '/reference-constraints',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const project = await loadOwnedProjectOr404(req, res);
+    if (!project) {
+      return;
+    }
+
+    try {
+      const definitions = await listProjectDefinitions(
+        project.id,
+        'reference_constraint',
+      );
+      res.status(200).json({ referenceConstraints: definitions });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[definitions] List project reference constraints error:',
+        error,
+      );
+      res
+        .status(500)
+        .json({ error: 'PROJECT_REFERENCE_CONSTRAINTS_LIST_FAILED' });
+    }
+  },
+);
+
 const deleteProjectDefinition = async (
   req: AuthedRequest,
   res: Response,
-  type: 'character' | 'scene' | 'style',
+  type: 'character' | 'scene' | 'style' | 'reference_constraint',
 ): Promise<void> => {
   const project = await loadOwnedProjectOr404(req, res);
   if (!project) {
@@ -175,6 +202,13 @@ router.delete(
   '/styles/:definitionId',
   async (req: AuthedRequest, res: Response): Promise<void> => {
     await deleteProjectDefinition(req, res, 'style');
+  },
+);
+
+router.delete(
+  '/reference-constraints/:definitionId',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    await deleteProjectDefinition(req, res, 'reference_constraint');
   },
 );
 

@@ -63,10 +63,11 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
     return;
   }
 
-  const { characters, scenes, styles } = req.body as {
+  const { characters, scenes, styles, referenceConstraints } = req.body as {
     characters?: number[];
     scenes?: number[];
     styles?: number[];
+    referenceConstraints?: number[];
   };
 
   const characterIds = Array.isArray(characters)
@@ -78,11 +79,15 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
   const styleIds = Array.isArray(styles)
     ? styles.filter((id) => Number.isFinite(Number(id)))
     : [];
+  const referenceConstraintIds = Array.isArray(referenceConstraints)
+    ? referenceConstraints.filter((id) => Number.isFinite(Number(id)))
+    : [];
 
   if (
     characterIds.length === 0 &&
     sceneIds.length === 0 &&
-    styleIds.length === 0
+    styleIds.length === 0 &&
+    referenceConstraintIds.length === 0
   ) {
     res.status(400).json({ error: 'NO_DEFINITIONS_PROVIDED' });
     return;
@@ -119,11 +124,22 @@ router.post('/', async (req: AuthedRequest, res: Response) => {
       importedStyles.push(cloned);
     }
 
+    const importedReferenceConstraints = [];
+    for (const id of referenceConstraintIds) {
+      const cloned = await cloneDefinitionToProject(
+        Number(id),
+        project.space_id,
+        project.id,
+      );
+      importedReferenceConstraints.push(cloned);
+    }
+
     res.status(201).json({
       imported: {
         characters: importedCharacters,
         scenes: importedScenes,
         styles: importedStyles,
+        referenceConstraints: importedReferenceConstraints,
       },
     });
   } catch (error: any) {

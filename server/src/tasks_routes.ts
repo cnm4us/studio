@@ -25,6 +25,7 @@ import {
 import type {
   CharacterAppearanceMetadata,
   StyleDefinitionMetadata,
+  ReferenceConstraintMetadata,
 } from './definition_metadata.js';
 import { renderPrompt } from './prompt_renderer.js';
 import {
@@ -681,6 +682,7 @@ taskRenderRouter.post(
       characterDefinitionIds?: number[] | null;
       styleDefinitionId?: number | null;
       sceneDefinitionId?: number | null;
+      referenceConstraintDefinitionId?: number | null;
     };
 
     let prompt = input?.prompt ?? null;
@@ -704,6 +706,7 @@ taskRenderRouter.post(
       let characterDefinitions: any[] = [];
       let styleDefinition: any | null = null;
       let sceneDefinition: any | null = null;
+      let referenceConstraintDefinition: any | null = null;
 
       const characterIdsRaw =
         (Array.isArray(input?.characterDefinitionIds)
@@ -780,6 +783,33 @@ taskRenderRouter.post(
         sceneDefinition = list[0];
       }
 
+      if (input?.referenceConstraintDefinitionId) {
+        const [rows] = await db.query(
+          `SELECT *
+           FROM definitions
+           WHERE id = ?
+             AND (
+               (scope = 'project' AND project_id = ?)
+               OR (scope = 'space' AND space_id = ?)
+             )
+             AND type = 'reference_constraint'
+           LIMIT 1`,
+          [
+            input.referenceConstraintDefinitionId,
+            task.project_id,
+            task.space_id,
+          ],
+        );
+        const list = rows as any[];
+        if (list.length === 0) {
+          res
+            .status(400)
+            .json({ error: 'REFERENCE_CONSTRAINT_DEFINITION_NOT_FOUND' });
+          return;
+        }
+        referenceConstraintDefinition = list[0];
+      }
+
       const characterMetas: CharacterAppearanceMetadata[] =
         characterDefinitions.map((def) => {
           const parsed = parseJsonIfString<CharacterAppearanceMetadata>(
@@ -791,6 +821,10 @@ taskRenderRouter.post(
         styleDefinition?.metadata,
       );
       const sceneMeta = parseJsonIfString<unknown>(sceneDefinition?.metadata);
+      const referenceConstraintMeta =
+        parseJsonIfString<ReferenceConstraintMetadata>(
+          referenceConstraintDefinition?.metadata,
+        );
 
       let collectedRefs: CollectedAssetRef[] = [];
       try {
@@ -816,6 +850,15 @@ taskRenderRouter.post(
                 id: sceneDefinition.id as number,
                 name: (sceneDefinition.name as string) ?? 'Scene',
                 metadata: (sceneMeta as Record<string, unknown>) ?? null,
+              }
+            : null,
+          referenceConstraint: referenceConstraintDefinition
+            ? {
+                id: referenceConstraintDefinition.id as number,
+                name:
+                  (referenceConstraintDefinition.name as string) ??
+                  'Reference Constraint',
+                metadata: referenceConstraintMeta ?? null,
               }
             : null,
         });
@@ -920,6 +963,10 @@ taskRenderRouter.post(
         }),
         style: styleMeta,
         scene: sceneMeta,
+        referenceConstraint: referenceConstraintMeta,
+        referenceConstraintName: referenceConstraintDefinition
+          ? (referenceConstraintDefinition.name as string)
+          : null,
         imageReferences: resolvedImageRefs,
       });
       const hasInlineImages = inlineImageInputs.length > 0;
@@ -1013,6 +1060,9 @@ taskRenderRouter.post(
         styleMetadata: styleMeta ?? null,
         sceneDefinitionId: sceneDefinition?.id ?? null,
         sceneMetadata: sceneMeta ?? null,
+        referenceConstraintDefinitionId:
+          referenceConstraintDefinition?.id ?? null,
+        referenceConstraintMetadata: referenceConstraintMeta ?? null,
       };
 
       const asset = await createRenderedAsset(

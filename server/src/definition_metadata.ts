@@ -127,3 +127,26 @@ export type StyleDefinitionMetadata = {
     [key: string]: string | string[] | undefined;
   };
 };
+
+export type ReferenceConstraintMetadata = {
+  reference_constraints?: {
+    fidelity_mode?: string;
+    identity_lock?: string;
+    layout_lock?: string;
+    camera_flexibility?: string;
+    pose_flexibility?: string;
+    style_application?: string[];
+    [key: string]: string | string[] | undefined;
+  };
+  reference_images?: {
+    character_reference_image_ids?: string[];
+    scene_reference_image_ids?: string[];
+    style_reference_image_ids?: string[];
+    [key: string]: string | string[] | undefined;
+  };
+  [categoryKey: string]:
+    | {
+        [propertyKey: string]: string | string[] | undefined;
+      }
+    | undefined;
+};

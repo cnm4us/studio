@@ -1,6 +1,10 @@
 import { getDbPool } from './db.js';
 
-export type DefinitionType = 'character' | 'scene' | 'style';
+export type DefinitionType =
+  | 'character'
+  | 'scene'
+  | 'style'
+  | 'reference_constraint';
 export type DefinitionScope = 'space' | 'project';
 
 export type DefinitionRecord = {

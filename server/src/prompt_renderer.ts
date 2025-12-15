@@ -1,6 +1,7 @@
 import type {
   CharacterAppearanceMetadata,
   StyleDefinitionMetadata,
+  ReferenceConstraintMetadata,
 } from './definition_metadata.js';
 import {
   findCharacterCategory,
@@ -11,6 +12,7 @@ import {
   findStyleProperty,
   resolveOptionLabel,
 } from './definition_config_helpers.js';
+import { referenceConstraintConfig } from '../../shared/definition_config/referenceConstraints/index.js';
 import {
   assetReferenceBindings,
   type AssetReferenceType,
@@ -35,10 +37,13 @@ export type RenderPromptOptions = {
   characters: RenderCharacterInput[];
   style: StyleDefinitionMetadata | null;
   scene: unknown | null;
+  referenceConstraint?: ReferenceConstraintMetadata | null;
+  referenceConstraintName?: string | null;
   imageReferences?: ResolvedPromptImageRef[];
 };
 
 const SECTION_IMAGE_REFERENCES = 'IMAGE REFERENCES';
+const SECTION_REFERENCE_CONSTRAINTS = 'REFERENCE CONSTRAINTS';
 const SECTION_STYLE = 'STYLE';
 const SECTION_CHARACTERS = 'CHARACTERS';
 const SECTION_SCENE = 'SCENE';
@@ -213,6 +218,55 @@ const renderImageReferencesSection = (
   }
 
   return lines.join('\n').trimEnd();
+};
+
+const renderReferenceConstraintsSection = (
+  name: string | null | undefined,
+  meta: ReferenceConstraintMetadata | null | undefined,
+): string => {
+  if (!meta || typeof meta !== 'object') {
+    return '';
+  }
+
+  const lines: string[] = [];
+  lines.push(SECTION_REFERENCE_CONSTRAINTS);
+
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  if (trimmedName.length > 0) {
+    lines.push(`- Name: ${trimmedName}`);
+  }
+
+  let hasAnyValue = false;
+
+  const categories = referenceConstraintConfig.categories
+    .slice()
+    .sort((a, b) => a.order - b.order);
+
+  for (const category of categories) {
+    const categoryValue = (meta as any)[
+      category.key as keyof ReferenceConstraintMetadata
+    ] as Record<string, unknown> | undefined;
+    if (!categoryValue || typeof categoryValue !== 'object') {
+      continue;
+    }
+
+    for (const prop of category.properties) {
+      const rawValue =
+        (categoryValue as Record<string, unknown>)[prop.key] ?? null;
+      const formatted = formatValue(rawValue, prop.options);
+      if (!formatted) continue;
+
+      hasAnyValue = true;
+      const label = prop.label ?? humanizeKey(prop.key);
+      lines.push(`- ${label}: ${formatted}`);
+    }
+  }
+
+  if (!hasAnyValue && !trimmedName) {
+    return '';
+  }
+
+  return lines.join('\n');
 };
 
 const renderCharacterBlock = (character: RenderCharacterInput): string => {
@@ -433,14 +487,31 @@ const renderSceneSection = (scene: unknown): string | '' => {
 };
 
 export const renderPrompt = (options: RenderPromptOptions): string => {
-  const { taskPrompt, characters, style, scene, imageReferences } = options;
+  const {
+    taskPrompt,
+    characters,
+    style,
+    scene,
+    referenceConstraint,
+    referenceConstraintName,
+    imageReferences,
+  } = options;
 
   const sections: string[] = [];
 
   // 1. IMAGE REFERENCES
   sections.push(renderImageReferencesSection(imageReferences));
 
-  // 2. STYLE (placeholder for now; will be expanded in later steps)
+  // 2. REFERENCE CONSTRAINTS (if any)
+  const constraintsSection = renderReferenceConstraintsSection(
+    referenceConstraintName,
+    referenceConstraint,
+  );
+  if (constraintsSection) {
+    sections.push(constraintsSection);
+  }
+
+  // 3. STYLE
   if (style) {
     const styleBlock = renderStyleSection(style);
     if (styleBlock) {
@@ -448,7 +519,7 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
     }
   }
 
-  // 3. CHARACTERS
+  // 4. CHARACTERS
   if (characters.length > 0) {
     const characterBlocks = characters.map((c) => renderCharacterBlock(c));
     sections.push(
@@ -456,7 +527,7 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
     );
   }
 
-  // 4. SCENE
+  // 5. SCENE
   if (scene) {
     const sceneBlock = renderSceneSection(scene);
     if (sceneBlock) {
@@ -464,7 +535,7 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
     }
   }
 
-  // 5. TASK
+  // 6. TASK
   sections.push(
     [
       SECTION_TASK,
@@ -474,7 +545,7 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
     ].join('\n'),
   );
 
-  // 6. TEXT ELEMENTS (speech / thought bubbles)
+  // 7. TEXT ELEMENTS (speech / thought bubbles)
   sections.push(
     [
       SECTION_TEXT_ELEMENTS,

@@ -1,6 +1,7 @@
 import type {
   CharacterAppearanceMetadata,
   StyleDefinitionMetadata,
+  ReferenceConstraintMetadata,
 } from './definition_metadata.js';
 import {
   assetReferenceBindings,
@@ -33,6 +34,12 @@ type SceneInput = {
   id: number;
   name: string;
   metadata: Record<string, unknown> | null;
+};
+
+type ReferenceConstraintInput = {
+  id: number;
+  name: string;
+  metadata: ReferenceConstraintMetadata | null;
 };
 
 const collectIdsFromCategory = (
@@ -80,6 +87,7 @@ export const collectAssetRefsFromMetadata = (params: {
   characters: CharacterInput[];
   style?: StyleInput | null;
   scene?: SceneInput | null;
+  referenceConstraint?: ReferenceConstraintInput | null;
 }): CollectedAssetRef[] => {
   const results: CollectedAssetRef[] = [];
 
@@ -163,6 +171,40 @@ export const collectAssetRefsFromMetadata = (params: {
     }
   }
 
+  // Reference constraint–owned images, mapped into character/scene/style scopes.
+  const constraintBindings = assetReferenceBindings.filter(
+    (binding) => binding.definitionType === 'reference_constraint',
+  );
+
+  const referenceConstraint = params.referenceConstraint;
+  if (referenceConstraint && referenceConstraint.metadata) {
+    const meta = referenceConstraint.metadata;
+
+    for (const binding of constraintBindings) {
+      const category = (meta as any)[
+        binding.metadataCategoryKey as keyof ReferenceConstraintMetadata
+      ] as Record<string, unknown> | undefined;
+
+      const assetIds = collectIdsFromCategory(category, binding);
+      if (assetIds.length === 0) continue;
+
+      // Map constraint-owned assets into the most relevant prompt scope.
+      const scope: PromptAssetRefScope =
+        binding.assetType === 'scene_reference'
+          ? 'scene'
+          : binding.assetType === 'style_reference'
+          ? 'style'
+          : 'character';
+
+      results.push({
+        scope,
+        definitionId: referenceConstraint.id,
+        definitionName: referenceConstraint.name,
+        binding,
+        assetIds,
+      });
+    }
+  }
+
   return results;
 };
-

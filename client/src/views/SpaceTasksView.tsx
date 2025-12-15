@@ -6,6 +6,7 @@ type SpaceTasksViewProps = {
   spaceCharacters: DefinitionSummary[];
   spaceScenes: DefinitionSummary[];
   spaceStyles: DefinitionSummary[];
+  spaceReferenceConstraints: DefinitionSummary[];
   tasksLoading: boolean;
   tasksError: string | null;
   tasks: any[];
@@ -26,6 +27,7 @@ type SpaceTasksViewProps = {
     characterIds: number[];
     sceneId: number | null;
     styleId: number | null;
+    referenceConstraintId: number | null;
     prompt: string | null;
   }) => void;
   onUpdateRenderedAssetState: (
@@ -40,6 +42,7 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
     spaceCharacters,
     spaceScenes,
     spaceStyles,
+    spaceReferenceConstraints,
     tasksLoading,
     tasksError,
     tasks,
@@ -67,6 +70,7 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
         characters: number[];
         sceneId: number | null;
         styleId: number | null;
+        referenceConstraintId: number | null;
         prompt: string;
       }
     >
@@ -77,6 +81,7 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
       characters: [],
       sceneId: null,
       styleId: null,
+      referenceConstraintId: null,
       prompt: '',
     };
 
@@ -86,11 +91,13 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
       characters: number[];
       sceneId: number | null;
       styleId: number | null;
+      referenceConstraintId: number | null;
       prompt: string;
     }) => {
       characters: number[];
       sceneId: number | null;
       styleId: number | null;
+      referenceConstraintId: number | null;
       prompt: string;
     },
   ) => {
@@ -457,6 +464,29 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
                             ))}
                           </select>
                         </label>
+                        <label>
+                          Reference constraint:{' '}
+                          <select
+                            value={cast.referenceConstraintId ?? ''}
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              updateCastForTask(task.id, (prev) => ({
+                                ...prev,
+                                referenceConstraintId: val
+                                  ? Number(val)
+                                  : null,
+                              }));
+                            }}
+                            style={{ padding: '0.2rem 0.4rem' }}
+                          >
+                            <option value="">None</option>
+                            {spaceReferenceConstraints.map((def) => (
+                              <option key={def.id} value={def.id}>
+                                {def.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
 
                       <div
@@ -588,6 +618,45 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
                             </span>
                           );
                         })()}
+                        {cast.referenceConstraintId != null && (() => {
+                          const def = spaceReferenceConstraints.find(
+                            (s) => s.id === cast.referenceConstraintId,
+                          );
+                          if (!def) return null;
+                          return (
+                            <span
+                              key="reference-constraint-pill"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.15rem 0.35rem',
+                                borderRadius: '999px',
+                                backgroundColor: '#ffe0b2',
+                              }}
+                            >
+                              {def.name}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateCastForTask(task.id, (prev) => ({
+                                    ...prev,
+                                    referenceConstraintId: null,
+                                  }))
+                                }
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  padding: 0,
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -643,6 +712,8 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
                             characterIds: cast.characters,
                             sceneId: cast.sceneId,
                             styleId: cast.styleId,
+                            referenceConstraintId:
+                              cast.referenceConstraintId,
                             prompt: cast.prompt || null,
                           })
                         }
