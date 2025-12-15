@@ -16,6 +16,7 @@ export type GeminiInlineImage = {
 export type GeminiRenderOptions = {
   prompt: string;
   inlineImages?: GeminiInlineImage[];
+  inlineImageTexts?: string[];
 };
 
 export const isPromptDebugEnabled = (): boolean => {
@@ -83,25 +84,53 @@ export const renderImageWithGemini = async (
       : {
           prompt: arg.prompt,
           inlineImages: arg.inlineImages ?? [],
+          inlineImageTexts: arg.inlineImageTexts ?? [],
         };
 
-  const { prompt, inlineImages } = options;
+  const { prompt, inlineImages, inlineImageTexts } = options;
 
   if (isPromptDebugEnabled()) {
+    const partsForStub: Array<
+      { text: string } | { inlineData: GeminiInlineImage }
+    > = [];
+
+    if (!inlineImages || inlineImages.length === 0) {
+      partsForStub.push({ text: prompt });
+    } else if (
+      inlineImageTexts &&
+      inlineImageTexts.length === inlineImages.length
+    ) {
+      partsForStub.push({ text: prompt });
+      inlineImages.forEach((img, index) => {
+        const text = inlineImageTexts[index];
+        if (text && text.trim().length > 0) {
+          partsForStub.push({ text });
+        }
+        partsForStub.push({
+          inlineData: {
+            mimeType: img.mimeType,
+            data: `<base64 ${img.data.length} chars redacted>`,
+          },
+        });
+      });
+    } else {
+      partsForStub.push({ text: prompt });
+      (inlineImages ?? []).forEach((img) => {
+        partsForStub.push({
+          inlineData: {
+            mimeType: img.mimeType,
+            data: `<base64 ${img.data.length} chars redacted>`,
+          },
+        });
+      });
+    }
+
     const stub = {
       model: cfg.model,
       contents: [
         {
           role: 'user',
-          parts: [
-            { text: prompt },
-            ...(inlineImages ?? []).map((img) => ({
-              inlineData: {
-                mimeType: img.mimeType,
-                data: `<base64 ${img.data.length} chars redacted>`,
-              },
-            })),
-          ],
+          parts: partsForStub,
         },
       ],
     };
@@ -152,15 +181,37 @@ export const renderImageWithGemini = async (
       return model.generateContent(prompt);
     }
 
-    const parts: Array<{ text: string } | { inlineData: GeminiInlineImage }> = [
-      { text: prompt },
-      ...inlineImages.map((img) => ({
-        inlineData: {
-          data: img.data,
-          mimeType: img.mimeType,
-        },
-      })),
-    ];
+    const parts: Array<{ text: string } | { inlineData: GeminiInlineImage }> =
+      [];
+
+    if (
+      inlineImageTexts &&
+      inlineImageTexts.length === inlineImages.length
+    ) {
+      parts.push({ text: prompt });
+      inlineImages.forEach((img, index) => {
+        const text = inlineImageTexts[index];
+        if (text && text.trim().length > 0) {
+          parts.push({ text });
+        }
+        parts.push({
+          inlineData: {
+            data: img.data,
+            mimeType: img.mimeType,
+          },
+        });
+      });
+    } else {
+      parts.push({ text: prompt });
+      inlineImages.forEach((img) => {
+        parts.push({
+          inlineData: {
+            data: img.data,
+            mimeType: img.mimeType,
+          },
+        });
+      });
+    }
 
     return model.generateContent(parts as any);
   })();

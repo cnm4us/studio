@@ -22,6 +22,7 @@ type SpaceAssetDto = {
   id: number;
   spaceId: number;
   name: string;
+  usageHint: string | null;
   type: string;
   fileKey: string;
   fileUrl: string;
@@ -68,6 +69,7 @@ const mapSpaceAsset = (row: {
   id: number;
   space_id: number;
   name: string;
+  usage_hint: string | null;
   type: string;
   file_key: string;
   file_url: string;
@@ -77,6 +79,7 @@ const mapSpaceAsset = (row: {
   id: row.id,
   spaceId: row.space_id,
   name: row.name,
+  usageHint: row.usage_hint ?? null,
   type: row.type,
   fileKey: row.file_key,
   fileUrl: maybeSignSpaceAssetUrl(row),

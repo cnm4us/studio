@@ -213,6 +213,53 @@ export function ReferenceConstraintDefinitionFormView(
                       })
                       .filter(Boolean) as SpaceAssetSummary[];
 
+                    const usageOverrides =
+                      constraintMetadata.reference_images_usage ??
+                      ({} as {
+                        [assetId: string]: { usageInstruction?: string };
+                      });
+
+                    const handleUsageChange = (
+                      assetId: number,
+                      value: string,
+                    ): void => {
+                      const id = String(assetId);
+                      const trimmed = value.trim();
+                      setConstraintMetadata((prev) => {
+                        const prevUsage =
+                          (prev.reference_images_usage as
+                            | {
+                                [assetId: string]: {
+                                  usageInstruction?: string;
+                                };
+                              }
+                            | undefined) ?? {};
+                        const nextUsage: {
+                          [assetId: string]: {
+                            usageInstruction?: string;
+                          };
+                        } = { ...prevUsage };
+
+                        if (trimmed.length === 0) {
+                          delete nextUsage[id];
+                        } else {
+                          nextUsage[id] = {
+                            ...(nextUsage[id] ?? {}),
+                            usageInstruction: trimmed,
+                          };
+                        }
+
+                        const next: ReferenceConstraintMetadata = {
+                          ...prev,
+                          reference_images_usage:
+                            Object.keys(nextUsage).length > 0
+                              ? nextUsage
+                              : undefined,
+                        };
+                        return next;
+                      });
+                    };
+
                     const handleAddAsset = (assetId: number): void => {
                       const id = String(assetId);
                       setConstraintMetadata((prev) => {
@@ -307,42 +354,75 @@ export function ReferenceConstraintDefinitionFormView(
                             style={{
                               marginBottom: '0.25rem',
                               display: 'flex',
-                              flexWrap: 'wrap',
+                              flexDirection: 'column',
                               gap: '0.35rem',
                             }}
                           >
-                            {selectedAssets.map((asset) => (
-                              <span
-                                key={asset.id}
-                                style={{
-                                  borderRadius: '999px',
-                                  border: '1px solid #444',
-                                  padding: '0.1rem 0.4rem',
-                                  fontSize: '0.8rem',
-                                  backgroundColor: '#222',
-                                  color: '#fff',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                }}
-                              >
-                                <span>{asset.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveAsset(asset.id)}
+                            {selectedAssets.map((asset) => {
+                              const override =
+                                usageOverrides[String(asset.id)]
+                                  ?.usageInstruction ?? '';
+                              return (
+                                <div
+                                  key={asset.id}
                                   style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: '#fff',
-                                    cursor: 'pointer',
-                                    fontSize: '0.8rem',
-                                    padding: 0,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.25rem',
                                   }}
                                 >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
+                                  <span
+                                    style={{
+                                      borderRadius: '999px',
+                                      border: '1px solid #444',
+                                      padding: '0.1rem 0.4rem',
+                                      fontSize: '0.8rem',
+                                      backgroundColor: '#222',
+                                      color: '#fff',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem',
+                                      maxWidth: '100%',
+                                    }}
+                                  >
+                                    <span>{asset.name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleRemoveAsset(asset.id)
+                                      }
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        padding: 0,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                  <textarea
+                                    placeholder="Usage in this constraint (optional; overrides asset default)"
+                                    value={override}
+                                    onChange={(e) =>
+                                      handleUsageChange(
+                                        asset.id,
+                                        e.target.value,
+                                      )
+                                    }
+                                    rows={2}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.25rem 0.35rem',
+                                      fontSize: '0.8rem',
+                                      resize: 'vertical',
+                                    }}
+                                  />
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                         {availableAssets.length > 0 && (

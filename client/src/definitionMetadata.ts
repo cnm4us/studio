@@ -154,7 +154,18 @@ export type ReferenceConstraintMetadata = {
     | {
         [propertyKey: string]: string | string[] | undefined;
       }
+    | {
+        [assetId: string]: {
+          usageInstruction?: string;
+        };
+      }
     | undefined;
+
+  reference_images_usage?: {
+    [assetId: string]: {
+      usageInstruction?: string;
+    };
+  };
 };
 
 // Generic scene metadata: categories keyed by category key, each containing

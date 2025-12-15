@@ -4,6 +4,7 @@ export type SpaceAssetRecord = {
   id: number;
   space_id: number;
   name: string;
+  usage_hint: string | null;
   type: string;
   file_key: string;
   file_url: string;
@@ -99,4 +100,3 @@ export const getSpaceAssetsByIds = async (
   );
   return rows as SpaceAssetRecord[];
 };
-

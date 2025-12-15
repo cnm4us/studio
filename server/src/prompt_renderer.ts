@@ -30,6 +30,8 @@ export type ResolvedPromptImageRef = {
   assetType: AssetReferenceType;
   assetName: string;
   url: string;
+   assetId: number;
+  usageInstruction?: string;
 };
 
 export type RenderPromptOptions = {
@@ -210,6 +212,9 @@ const renderImageReferencesSection = (
         const typeLabel = ASSET_TYPE_LABELS[assetType] ?? assetType;
         for (const ref of refsOfType) {
           lines.push(`- ${ref.assetName} — ${typeLabel}`);
+          if (ref.usageInstruction && ref.usageInstruction.trim().length > 0) {
+            lines.push(`  - Usage: ${ref.usageInstruction.trim()}`);
+          }
         }
       }
 
@@ -247,7 +252,13 @@ const renderImageReferencesSection = (
         const typeLabel = ASSET_TYPE_LABELS[assetType] ?? assetType;
         lines.push(`- ${definitionName} — ${typeLabel}:`);
         for (const ref of refsOfType) {
-          lines.push(`  - ${ref.assetName}`);
+          if (ref.usageInstruction && ref.usageInstruction.trim().length > 0) {
+            lines.push(
+              `  - ${ref.assetName} — Usage: ${ref.usageInstruction.trim()}`,
+            );
+          } else {
+            lines.push(`  - ${ref.assetName}`);
+          }
         }
       }
     }

@@ -189,3 +189,8 @@ CREATE TABLE IF NOT EXISTS space_assets (
   INDEX idx_space_assets_space (space_id),
   INDEX idx_space_assets_space_type (space_id, type)
 );
+
+-- Plan 20_5: Optional usage hint on space assets for reference usage defaults
+
+ALTER TABLE space_assets
+  ADD COLUMN usage_hint TEXT NULL AFTER name;

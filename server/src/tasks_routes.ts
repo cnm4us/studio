@@ -76,6 +76,32 @@ type InlineImageScopedCandidate = {
   assetType: import('../../shared/definition_config/assetReferenceMapping.js').AssetReferenceType;
   definitionName: string;
   assetName: string;
+  usageInstruction?: string;
+};
+
+const defaultUsageForAssetType = (
+  assetType: import('../../shared/definition_config/assetReferenceMapping.js').AssetReferenceType,
+): string => {
+  switch (assetType) {
+    case 'character_face':
+      return 'Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally.';
+    case 'character_body':
+      return 'Use this image for overall body proportions and posture; keep facial identity from the primary face reference.';
+    case 'character_hair':
+      return 'Use this image for hairstyle and hair texture only.';
+    case 'character_full':
+      return 'Use this image as a full-character identity and pose reference.';
+    case 'character_prop':
+      return 'Use this image for prop details only; do not change the character’s identity based on it.';
+    case 'character_clothing':
+      return 'Use this image for clothing and outfit details only; keep the character’s face and body from the other references.';
+    case 'scene_reference':
+      return 'Use this image for scene layout, environment, and lighting; keep character identity from character references.';
+    case 'style_reference':
+      return 'Use this image for rendering style, line work, and color treatment only.';
+    default:
+      return '';
+  }
 };
 
 const parseJsonIfString = <T>(value: unknown): T | null => {
@@ -892,6 +918,7 @@ taskRenderRouter.post(
       let resolvedImageRefs: import('./prompt_renderer.js').ResolvedPromptImageRef[] =
         [];
       let inlineImageInputs: InlineImageInput[] = [];
+      let scopedCandidates: InlineImageScopedCandidate[] = [];
 
       try {
         const assetIdSet = new Set<number>();
@@ -906,13 +933,16 @@ taskRenderRouter.post(
 
         const assetIds = Array.from(assetIdSet);
         if (assetIds.length > 0 && task.space_id) {
-          const spaceAssets = await getSpaceAssetsByIds(task.space_id, assetIds);
+          const spaceAssets = await getSpaceAssetsByIds(
+            task.space_id,
+            assetIds,
+          );
           const assetsById = new Map<number, (typeof spaceAssets)[number]>();
           for (const asset of spaceAssets) {
             assetsById.set(asset.id, asset);
           }
 
-          const scopedCandidates: InlineImageScopedCandidate[] = [];
+          scopedCandidates = [];
 
           resolvedImageRefs = collectedRefs.flatMap((ref) =>
             ref.assetIds
@@ -927,6 +957,18 @@ taskRenderRouter.post(
                   asset.file_url,
                 );
 
+                const assetIdStr = String(asset.id);
+                const overrideUsage =
+                  referenceConstraintMeta?.reference_images_usage?.[
+                    assetIdStr
+                  ]?.usageInstruction;
+                const rawUsage =
+                  overrideUsage && overrideUsage.trim().length > 0
+                    ? overrideUsage.trim()
+                    : asset.usage_hint && asset.usage_hint.trim().length > 0
+                    ? asset.usage_hint.trim()
+                    : defaultUsageForAssetType(ref.binding.assetType);
+
                 const resolvedRef: import('./prompt_renderer.js').ResolvedPromptImageRef =
                   {
                     scope: ref.scope,
@@ -934,6 +976,8 @@ taskRenderRouter.post(
                     assetType: ref.binding.assetType,
                     assetName: asset.name,
                     url: signedUrl,
+                    assetId: asset.id,
+                    usageInstruction: rawUsage || undefined,
                   };
 
                 const meta = asset.metadata as
@@ -953,6 +997,7 @@ taskRenderRouter.post(
                   assetType: ref.binding.assetType,
                   definitionName: ref.definitionName,
                   assetName: asset.name,
+                  usageInstruction: rawUsage || undefined,
                 });
 
                 return resolvedRef;
@@ -1039,6 +1084,20 @@ taskRenderRouter.post(
             inlineImageInputs = finalCandidates.map(
               (candidate) => candidate.input,
             );
+
+            if (isPromptDebugEnabled() && finalCandidates.length > 0) {
+              // eslint-disable-next-line no-console
+              console.log('[ai] Inline image usage for task', task.id);
+              for (const candidate of finalCandidates) {
+                // eslint-disable-next-line no-console
+                console.log(
+                  `  - ${candidate.scope}/${candidate.assetType}: assetName="${candidate.assetName}"` +
+                    (candidate.usageInstruction
+                      ? `, usage="${candidate.usageInstruction}"`
+                      : ''),
+                );
+              }
+            }
           } else {
             inlineImageInputs = [];
           }
@@ -1074,6 +1133,7 @@ taskRenderRouter.post(
       const hasInlineImages = inlineImageInputs.length > 0;
 
       let inlineImages: GeminiInlineImage[] = [];
+      let inlineImageTexts: string[] = [];
       if (hasInlineImages) {
         try {
           const parts = await loadInlineImageParts(inlineImageInputs);
@@ -1102,6 +1162,61 @@ taskRenderRouter.post(
                   `  - ${ref.scope}/${ref.assetType}: definition="${ref.definitionName}", assetName="${ref.assetName}", url="${ref.url}"`,
                 );
               }
+            }
+
+            if (inlineImages.length > 0 && inlineImageInputs.length > 0) {
+              const ASSET_TYPE_LABELS_LOCAL: Record<
+                import('../../shared/definition_config/assetReferenceMapping.js').AssetReferenceType,
+                string
+              > = {
+                character_face: 'Character reference images',
+                character_body: 'Body reference images',
+                character_hair: 'Hair reference images',
+                character_full: 'Full-character reference images',
+                character_prop: 'Prop reference images',
+                character_clothing: 'Clothing reference images',
+                scene_reference: 'Scene reference images',
+                style_reference: 'Style reference images',
+              };
+
+              const labelTexts: string[] = [];
+
+              const candidatesByInputKey = new Map<
+                string,
+                InlineImageScopedCandidate
+              >();
+              for (const candidate of scopedCandidates) {
+                const key = `${candidate.input.fileKey}|${candidate.input.mimeType}`;
+                if (!candidatesByInputKey.has(key)) {
+                  candidatesByInputKey.set(key, candidate);
+                }
+              }
+
+              inlineImageInputs.forEach((input) => {
+                const key = `${input.fileKey}|${input.mimeType}`;
+                const candidate = candidatesByInputKey.get(key);
+                if (!candidate) {
+                  labelTexts.push('');
+                  return;
+                }
+
+                const typeLabel =
+                  ASSET_TYPE_LABELS_LOCAL[candidate.assetType] ??
+                  candidate.assetType;
+                const header = `Image reference: ${candidate.assetName} — ${typeLabel}.`;
+                const usage =
+                  candidate.usageInstruction &&
+                  candidate.usageInstruction.trim().length > 0
+                    ? `Usage: ${candidate.usageInstruction.trim()}`
+                    : '';
+                labelTexts.push(
+                  usage && usage.length > 0
+                    ? `${header}\n${usage}`
+                    : header,
+                );
+              });
+
+              inlineImageTexts = labelTexts;
             }
           }
         } catch (err) {
@@ -1151,7 +1266,7 @@ taskRenderRouter.post(
           }
 
           return inlineImages.length > 0
-            ? { prompt: finalPrompt, inlineImages }
+            ? { prompt: finalPrompt, inlineImages, inlineImageTexts }
             : finalPrompt;
         })(),
       );

@@ -54,6 +54,7 @@ export type SpaceAssetSummary = {
   id: number;
   spaceId: number;
   name: string;
+  usageHint?: string | null;
   type: string;
   fileKey: string;
   fileUrl: string;
