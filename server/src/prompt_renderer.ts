@@ -144,7 +144,7 @@ const formatValue = (
 };
 
 const ASSET_TYPE_LABELS: Record<AssetReferenceType, string> = {
-  character_face: 'Face reference images',
+  character_face: 'Character reference images',
   character_body: 'Body reference images',
   character_hair: 'Hair reference images',
   character_full: 'Full-character reference images',
@@ -181,6 +181,37 @@ const renderImageReferencesSection = (
     );
     if (refsForScope.length === 0) continue;
 
+    const allFromConstraint = refsForScope.every(
+      (ref) => ref.definitionName === 'Reference constraint',
+    );
+
+    if (allFromConstraint) {
+      // Constraint-only references: present them as a simple block.
+      lines.push('Reference constraint:');
+
+      const byType = new Map<AssetReferenceType, ResolvedPromptImageRef[]>();
+      for (const ref of refsForScope) {
+        const existing = byType.get(ref.assetType);
+        if (existing) {
+          existing.push(ref);
+        } else {
+          byType.set(ref.assetType, [ref]);
+        }
+      }
+
+      for (const [assetType, refsOfType] of byType.entries()) {
+        const typeLabel = ASSET_TYPE_LABELS[assetType] ?? assetType;
+        for (const ref of refsOfType) {
+          lines.push(`- ${ref.assetName} — ${typeLabel}`);
+        }
+      }
+
+      lines.push('');
+      continue;
+    }
+
+    // Mixed references (characters/scenes/styles and possibly constraints) —
+    // use the existing scoped layout.
     lines.push(`${SCOPE_LABELS[scope]}:`);
 
     const byDefinition = new Map<string, ResolvedPromptImageRef[]>();
@@ -209,7 +240,7 @@ const renderImageReferencesSection = (
         const typeLabel = ASSET_TYPE_LABELS[assetType] ?? assetType;
         lines.push(`- ${definitionName} — ${typeLabel}:`);
         for (const ref of refsOfType) {
-          lines.push(`  - ${ref.assetName}: ${ref.url}`);
+          lines.push(`  - ${ref.assetName}`);
         }
       }
     }
@@ -243,6 +274,11 @@ const renderReferenceConstraintsSection = (
     .sort((a, b) => a.order - b.order);
 
   for (const category of categories) {
+    // Skip reference_images here; those are represented in IMAGE REFERENCES.
+    if (category.key === 'reference_images') {
+      continue;
+    }
+
     const categoryValue = (meta as any)[
       category.key as keyof ReferenceConstraintMetadata
     ] as Record<string, unknown> | undefined;

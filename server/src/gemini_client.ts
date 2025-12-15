@@ -1,4 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import fs from 'fs';
+import path from 'path';
 
 type GeminiConfig = {
   apiKey?: string;
@@ -82,11 +84,45 @@ export const renderImageWithGemini = async (
   const { prompt, inlineImages } = options;
 
   if (isPromptDebugEnabled()) {
+    const stub = {
+      model: cfg.model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            ...(inlineImages ?? []).map((img) => ({
+              inlineData: {
+                mimeType: img.mimeType,
+                data: `<base64 ${img.data.length} chars redacted>`,
+              },
+            })),
+          ],
+        },
+      ],
+    };
+
+    try {
+      const debugDir = path.join(__dirname, '..', 'debug');
+      if (!fs.existsSync(debugDir)) {
+        fs.mkdirSync(debugDir, { recursive: true });
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `gemini-request-${timestamp}.json`;
+      const filePath = path.join(debugDir, filename);
+      fs.writeFileSync(filePath, JSON.stringify(stub, null, 2), 'utf8');
+      // eslint-disable-next-line no-console
+      console.log(`[ai] Gemini request stub written to ${filePath}`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[ai] Failed to write Gemini request debug file:', err);
+    }
+
     // eslint-disable-next-line no-console
     console.log(
-      `[ai] Gemini prompt debug (model=${cfg.model}):\n` +
+      `[ai] Gemini request debug (model=${cfg.model}):\n` +
         '------------------------------------------------------------\n' +
-        `${prompt}\n` +
+        `${JSON.stringify(stub, null, 2)}\n` +
         '------------------------------------------------------------',
     );
     if (inlineImages && inlineImages.length > 0) {
@@ -94,6 +130,12 @@ export const renderImageWithGemini = async (
       console.log(
         `[ai] Gemini inline images: count=${inlineImages.length}`,
       );
+      inlineImages.forEach((img, index) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `  - [image ${index + 1}] mimeType=${img.mimeType}, bytes=${img.data.length}`,
+        );
+      });
     }
   }
 

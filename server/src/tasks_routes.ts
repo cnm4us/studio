@@ -1005,7 +1005,7 @@ taskRenderRouter.post(
                 // That is acceptable for high-level traceability.
                 // eslint-disable-next-line no-console
                 console.log(
-                  `  - ${ref.scope}/${ref.assetType}: definition="${ref.definitionName}", assetName="${ref.assetName}"`,
+                  `  - ${ref.scope}/${ref.assetType}: definition="${ref.definitionName}", assetName="${ref.assetName}", url="${ref.url}"`,
                 );
               }
             }

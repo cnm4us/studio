@@ -188,7 +188,6 @@ export const collectAssetRefsFromMetadata = (params: {
       const assetIds = collectIdsFromCategory(category, binding);
       if (assetIds.length === 0) continue;
 
-      // Map constraint-owned assets into the most relevant prompt scope.
       const scope: PromptAssetRefScope =
         binding.assetType === 'scene_reference'
           ? 'scene'
@@ -199,7 +198,7 @@ export const collectAssetRefsFromMetadata = (params: {
       results.push({
         scope,
         definitionId: referenceConstraint.id,
-        definitionName: referenceConstraint.name,
+        definitionName: 'Reference constraint',
         binding,
         assetIds,
       });
