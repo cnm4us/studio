@@ -83,6 +83,22 @@ export const assetReferenceBindings: AssetBinding[] = [
   {
     definitionType: 'reference_constraint',
     categoryKey: 'reference_images',
+    propertyKey: 'face_reference_image_ids',
+    metadataCategoryKey: 'reference_images',
+    metadataPropertyKey: 'face_reference_image_ids',
+    assetType: 'character_face',
+  },
+  {
+    definitionType: 'reference_constraint',
+    categoryKey: 'reference_images',
+    propertyKey: 'apparel_reference_image_ids',
+    metadataCategoryKey: 'reference_images',
+    metadataPropertyKey: 'apparel_reference_image_ids',
+    assetType: 'character_clothing',
+  },
+  {
+    definitionType: 'reference_constraint',
+    categoryKey: 'reference_images',
     propertyKey: 'character_reference_image_ids',
     metadataCategoryKey: 'reference_images',
     metadataPropertyKey: 'character_reference_image_ids',

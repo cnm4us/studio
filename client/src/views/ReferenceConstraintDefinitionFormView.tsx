@@ -178,7 +178,11 @@ export function ReferenceConstraintDefinitionFormView(
 
                     // Map property to asset type filter.
                     let assetTypes: string[] = [];
-                    if (prop.key === 'character_reference_image_ids') {
+                    if (prop.key === 'face_reference_image_ids') {
+                      assetTypes = ['character_face'];
+                    } else if (prop.key === 'apparel_reference_image_ids') {
+                      assetTypes = ['character_clothing'];
+                    } else if (prop.key === 'character_reference_image_ids') {
                       assetTypes = [
                         'character_face',
                         'character_body',

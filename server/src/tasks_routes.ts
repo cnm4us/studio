@@ -21,6 +21,7 @@ import type { RenderedAssetRecord } from './tasks_service.js';
 import {
   renderImageWithGemini,
   type GeminiInlineImage,
+  isPromptDebugEnabled,
 } from './gemini_client.js';
 import type {
   CharacterAppearanceMetadata,
@@ -62,7 +63,20 @@ type TaskWithProject = {
 };
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
-const MAX_INLINE_IMAGES = 8;
+const MAX_INLINE_IMAGES_TOTAL = 8;
+const MAX_INLINE_IMAGES_BY_SCOPE = {
+  character: 4,
+  scene: 3,
+  style: 3,
+} as const;
+
+type InlineImageScopedCandidate = {
+  input: InlineImageInput;
+  scope: import('./asset_reference_helpers.js').PromptAssetRefScope;
+  assetType: import('../../shared/definition_config/assetReferenceMapping.js').AssetReferenceType;
+  definitionName: string;
+  assetName: string;
+};
 
 const parseJsonIfString = <T>(value: unknown): T | null => {
   if (value == null) return null;
@@ -808,6 +822,10 @@ taskRenderRouter.post(
           return;
         }
         referenceConstraintDefinition = list[0];
+        // eslint-disable-next-line no-console
+        console.log(
+          `[ai] Reference constraint for task ${task.id}: definitionId=${referenceConstraintDefinition.id}, name="${referenceConstraintDefinition.name}"`,
+        );
       }
 
       const characterMetas: CharacterAppearanceMetadata[] =
@@ -888,14 +906,13 @@ taskRenderRouter.post(
 
         const assetIds = Array.from(assetIdSet);
         if (assetIds.length > 0 && task.space_id) {
-          const spaceAssets = await getSpaceAssetsByIds(
-            task.space_id,
-            assetIds,
-          );
+          const spaceAssets = await getSpaceAssetsByIds(task.space_id, assetIds);
           const assetsById = new Map<number, (typeof spaceAssets)[number]>();
           for (const asset of spaceAssets) {
             assetsById.set(asset.id, asset);
           }
+
+          const scopedCandidates: InlineImageScopedCandidate[] = [];
 
           resolvedImageRefs = collectedRefs.flatMap((ref) =>
             ref.assetIds
@@ -904,28 +921,21 @@ taskRenderRouter.post(
                 if (!Number.isFinite(id)) return null;
                 const asset = assetsById.get(id);
                 if (!asset) return null;
+
                 const signedUrl = signUrlForFileKey(
                   asset.file_key,
                   asset.file_url,
                 );
-                return {
-                  scope: ref.scope,
-                  definitionName: ref.definitionName,
-                  assetType: ref.binding.assetType,
-                  assetName: asset.name,
-                  url: signedUrl,
-                };
-              })
-              .filter(Boolean) as import('./prompt_renderer.js').ResolvedPromptImageRef[],
-          );
 
-          inlineImageInputs = collectedRefs
-            .flatMap((ref) =>
-              ref.assetIds.map((rawId) => {
-                const id = Number(rawId);
-                if (!Number.isFinite(id)) return null;
-                const asset = assetsById.get(id);
-                if (!asset) return null;
+                const resolvedRef: import('./prompt_renderer.js').ResolvedPromptImageRef =
+                  {
+                    scope: ref.scope,
+                    definitionName: ref.definitionName,
+                    assetType: ref.binding.assetType,
+                    assetName: asset.name,
+                    url: signedUrl,
+                  };
+
                 const meta = asset.metadata as
                   | { mimeType?: string | null }
                   | null;
@@ -933,13 +943,105 @@ taskRenderRouter.post(
                   meta && typeof meta === 'object' && meta.mimeType
                     ? String(meta.mimeType)
                     : 'image/jpeg';
-                return {
-                  fileKey: asset.file_key,
-                  mimeType,
-                } as InlineImageInput;
-              }),
-            )
-            .filter(Boolean) as InlineImageInput[];
+
+                scopedCandidates.push({
+                  input: {
+                    fileKey: asset.file_key,
+                    mimeType,
+                  },
+                  scope: ref.scope,
+                  assetType: ref.binding.assetType,
+                  definitionName: ref.definitionName,
+                  assetName: asset.name,
+                });
+
+                return resolvedRef;
+              })
+              .filter(Boolean) as import('./prompt_renderer.js').ResolvedPromptImageRef[],
+          );
+
+          if (scopedCandidates.length > 0) {
+            const candidatesByScope = new Map<
+              import('./asset_reference_helpers.js').PromptAssetRefScope,
+              InlineImageScopedCandidate[]
+            >();
+
+            for (const candidate of scopedCandidates) {
+              const existing = candidatesByScope.get(candidate.scope);
+              if (existing) {
+                existing.push(candidate);
+              } else {
+                candidatesByScope.set(candidate.scope, [candidate]);
+              }
+            }
+
+            const scopeOrder: import('./asset_reference_helpers.js').PromptAssetRefScope[] =
+              ['character', 'scene', 'style'];
+
+            const selectedCandidates: InlineImageScopedCandidate[] = [];
+
+            const totalPerScopeCounts: Record<
+              import('./asset_reference_helpers.js').PromptAssetRefScope,
+              number
+            > = {
+              character: 0,
+              scene: 0,
+              style: 0,
+            };
+
+            for (const scope of scopeOrder) {
+              const listForScope = candidatesByScope.get(scope) ?? [];
+              if (listForScope.length === 0) continue;
+
+              totalPerScopeCounts[scope] = listForScope.length;
+
+              const limit = MAX_INLINE_IMAGES_BY_SCOPE[scope];
+              const slice = listForScope.slice(0, limit);
+              selectedCandidates.push(...slice);
+            }
+
+            let finalCandidates = selectedCandidates;
+            if (finalCandidates.length > MAX_INLINE_IMAGES_TOTAL) {
+              finalCandidates = finalCandidates.slice(0, MAX_INLINE_IMAGES_TOTAL);
+            }
+
+            const sentPerScope: Record<
+              import('./asset_reference_helpers.js').PromptAssetRefScope,
+              number
+            > = {
+              character: 0,
+              scene: 0,
+              style: 0,
+            };
+            for (const candidate of finalCandidates) {
+              sentPerScope[candidate.scope] += 1;
+            }
+
+            const totalRequested = scopedCandidates.length;
+            const totalSent = finalCandidates.length;
+
+            if (totalSent < totalRequested) {
+              const droppedCharacter =
+                totalPerScopeCounts.character - sentPerScope.character;
+              const droppedScene =
+                totalPerScopeCounts.scene - sentPerScope.scene;
+              const droppedStyle =
+                totalPerScopeCounts.style - sentPerScope.style;
+
+              // eslint-disable-next-line no-console
+              console.log(
+                `[ai] Truncated inline images for task ${task.id}: ` +
+                  `requested=${totalRequested}, sent=${totalSent}, ` +
+                  `droppedByScope={character:${droppedCharacter}, scene:${droppedScene}, style:${droppedStyle}}`,
+              );
+            }
+
+            inlineImageInputs = finalCandidates.map(
+              (candidate) => candidate.input,
+            );
+          } else {
+            inlineImageInputs = [];
+          }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -973,16 +1075,8 @@ taskRenderRouter.post(
 
       let inlineImages: GeminiInlineImage[] = [];
       if (hasInlineImages) {
-        const cappedInputs = inlineImageInputs.slice(0, MAX_INLINE_IMAGES);
-        if (cappedInputs.length < inlineImageInputs.length) {
-          // eslint-disable-next-line no-console
-          console.log(
-            `[ai] Truncating inline images for task ${task.id}: requested=${inlineImageInputs.length}, capped=${cappedInputs.length}`,
-          );
-        }
-
         try {
-          const parts = await loadInlineImageParts(cappedInputs);
+          const parts = await loadInlineImageParts(inlineImageInputs);
           inlineImages = parts.map((part) => ({
             data: part.inlineData.data,
             mimeType: part.inlineData.mimeType,
@@ -1021,9 +1115,45 @@ taskRenderRouter.post(
       }
 
       const image = await renderImageWithGemini(
-        inlineImages.length > 0
-          ? { prompt: finalPrompt, inlineImages }
-          : finalPrompt,
+        (() => {
+          const textBytes = Buffer.byteLength(finalPrompt, 'utf8');
+          const imageBase64Bytes = inlineImages.reduce(
+            (sum, img) => sum + Buffer.byteLength(img.data, 'utf8'),
+            0,
+          );
+          const totalBytes = textBytes + imageBase64Bytes;
+
+          if (isPromptDebugEnabled()) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[ai] Gemini payload size for task ${task.id}: ` +
+                `text=${textBytes} bytes, inlineImages=${imageBase64Bytes} bytes, total=${totalBytes}`,
+            );
+          }
+
+          const MAX_GEMINI_PAYLOAD_BYTES_SOFT = 200_000;
+          const MAX_GEMINI_PAYLOAD_BYTES_HARD = 500_000;
+
+          if (totalBytes > MAX_GEMINI_PAYLOAD_BYTES_HARD) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[ai] Gemini payload for task ${task.id} exceeds hard budget; ` +
+                `falling back to text-only (total=${totalBytes} bytes).`,
+            );
+            return finalPrompt;
+          }
+
+          if (totalBytes > MAX_GEMINI_PAYLOAD_BYTES_SOFT) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[ai] Gemini payload for task ${task.id} exceeds soft budget: total=${totalBytes} bytes`,
+            );
+          }
+
+          return inlineImages.length > 0
+            ? { prompt: finalPrompt, inlineImages }
+            : finalPrompt;
+        })(),
       );
 
       const timestamp = Date.now();

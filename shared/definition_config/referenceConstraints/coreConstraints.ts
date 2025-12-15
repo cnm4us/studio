@@ -133,6 +133,20 @@ export const referenceConstraintImagesCategory: ReferenceConstraintCategory = {
     'Optional reference images that this constraint governs (character, scene, or style).',
   properties: [
     {
+      key: 'face_reference_image_ids',
+      label: 'Face reference images',
+      type: 'string',
+      description:
+        'IDs of face-focused reference images for character identity and expression preservation.',
+    },
+    {
+      key: 'apparel_reference_image_ids',
+      label: 'Apparel reference images',
+      type: 'string',
+      description:
+        'IDs of clothing / outfit reference images to apply to the character.',
+    },
+    {
       key: 'character_reference_image_ids',
       label: 'Character reference images',
       type: 'string',

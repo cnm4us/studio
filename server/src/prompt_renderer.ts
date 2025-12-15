@@ -161,7 +161,8 @@ const SCOPE_LABELS: Record<PromptAssetRefScope, string> = {
 };
 
 const renderImageReferencesSection = (
-  imageReferences?: ResolvedPromptImageRef[],
+  imageReferences: ResolvedPromptImageRef[] | undefined,
+  hasReferenceConstraint: boolean,
 ): string => {
   if (!imageReferences || imageReferences.length === 0) {
     return [
@@ -172,6 +173,12 @@ const renderImageReferencesSection = (
 
   const lines: string[] = [];
   lines.push(SECTION_IMAGE_REFERENCES);
+
+   if (hasReferenceConstraint) {
+    lines.push(
+      '(Use these reference images in accordance with the REFERENCE CONSTRAINTS section.)',
+    );
+  }
 
   const scopes: PromptAssetRefScope[] = ['character', 'scene', 'style'];
 
@@ -261,6 +268,10 @@ const renderReferenceConstraintsSection = (
 
   const lines: string[] = [];
   lines.push(SECTION_REFERENCE_CONSTRAINTS);
+
+  lines.push(
+    'Apply these rules when interpreting and combining reference images for this render.',
+  );
 
   const trimmedName = typeof name === 'string' ? name.trim() : '';
   if (trimmedName.length > 0) {
@@ -536,7 +547,11 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
   const sections: string[] = [];
 
   // 1. IMAGE REFERENCES
-  sections.push(renderImageReferencesSection(imageReferences));
+  const hasReferenceConstraintSection =
+    !!referenceConstraint && typeof referenceConstraint === 'object';
+  sections.push(
+    renderImageReferencesSection(imageReferences, hasReferenceConstraintSection),
+  );
 
   // 2. REFERENCE CONSTRAINTS (if any)
   const constraintsSection = renderReferenceConstraintsSection(

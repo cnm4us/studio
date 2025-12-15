@@ -143,6 +143,8 @@ export type ReferenceConstraintMetadata = {
     [key: string]: string | string[] | undefined;
   };
   reference_images?: {
+    face_reference_image_ids?: string[];
+    apparel_reference_image_ids?: string[];
     character_reference_image_ids?: string[];
     scene_reference_image_ids?: string[];
     style_reference_image_ids?: string[];

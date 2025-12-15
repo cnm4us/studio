@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 type GeminiConfig = {
   apiKey?: string;
@@ -17,7 +18,7 @@ export type GeminiRenderOptions = {
   inlineImages?: GeminiInlineImage[];
 };
 
-const isPromptDebugEnabled = (): boolean => {
+export const isPromptDebugEnabled = (): boolean => {
   const raw = process.env.DEBUG_PROMPT;
   if (!raw) return false;
   const trimmed = raw.trim().toLowerCase();
@@ -33,6 +34,9 @@ const getGeminiConfig = (): GeminiConfig => ({
 });
 
 let geminiClient: GoogleGenerativeAI | null = null;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const getGeminiClient = (): GoogleGenerativeAI | null => {
   const cfg = getGeminiConfig();
