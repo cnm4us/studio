@@ -63,12 +63,32 @@ type TaskWithProject = {
 };
 
 const SIGNED_URL_TTL_MS = 15 * 60 * 1000;
-const MAX_INLINE_IMAGES_TOTAL = 8;
-const MAX_INLINE_IMAGES_BY_SCOPE = {
-  character: 4,
-  scene: 3,
-  style: 3,
-} as const;
+const getMaxInlineImagesTotal = (): number => {
+  const raw = process.env.GEMINI_MAX_INLINE_IMAGES_TOTAL;
+  const numeric = raw ? Number(raw) : NaN;
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 8;
+};
+
+const getMaxInlineImagesByScope = (): {
+  character: number;
+  scene: number;
+  style: number;
+} => {
+  const rawCharacter = process.env.GEMINI_MAX_INLINE_IMAGES_CHARACTER;
+  const rawScene = process.env.GEMINI_MAX_INLINE_IMAGES_SCENE;
+  const rawStyle = process.env.GEMINI_MAX_INLINE_IMAGES_STYLE;
+
+  const character = rawCharacter ? Number(rawCharacter) : NaN;
+  const scene = rawScene ? Number(rawScene) : NaN;
+  const style = rawStyle ? Number(rawStyle) : NaN;
+
+  return {
+    character:
+      Number.isFinite(character) && character > 0 ? character : 4,
+    scene: Number.isFinite(scene) && scene > 0 ? scene : 3,
+    style: Number.isFinite(style) && style > 0 ? style : 3,
+  };
+};
 
 type InlineImageScopedCandidate = {
   input: InlineImageInput;
@@ -1023,6 +1043,9 @@ taskRenderRouter.post(
             const scopeOrder: import('./asset_reference_helpers.js').PromptAssetRefScope[] =
               ['character', 'scene', 'style'];
 
+            const maxByScope = getMaxInlineImagesByScope();
+            const maxTotal = getMaxInlineImagesTotal();
+
             const selectedCandidates: InlineImageScopedCandidate[] = [];
 
             const totalPerScopeCounts: Record<
@@ -1040,14 +1063,14 @@ taskRenderRouter.post(
 
               totalPerScopeCounts[scope] = listForScope.length;
 
-              const limit = MAX_INLINE_IMAGES_BY_SCOPE[scope];
+              const limit = maxByScope[scope];
               const slice = listForScope.slice(0, limit);
               selectedCandidates.push(...slice);
             }
 
             let finalCandidates = selectedCandidates;
-            if (finalCandidates.length > MAX_INLINE_IMAGES_TOTAL) {
-              finalCandidates = finalCandidates.slice(0, MAX_INLINE_IMAGES_TOTAL);
+            if (finalCandidates.length > maxTotal) {
+              finalCandidates = finalCandidates.slice(0, maxTotal);
             }
 
             const sentPerScope: Record<
@@ -1246,8 +1269,14 @@ taskRenderRouter.post(
             );
           }
 
-          const MAX_GEMINI_PAYLOAD_BYTES_SOFT = 200_000;
-          const MAX_GEMINI_PAYLOAD_BYTES_HARD = 500_000;
+          const MAX_GEMINI_PAYLOAD_BYTES_SOFT =
+            Number(process.env.GEMINI_PAYLOAD_SOFT_BYTES) > 0
+              ? Number(process.env.GEMINI_PAYLOAD_SOFT_BYTES)
+              : 200_000;
+          const MAX_GEMINI_PAYLOAD_BYTES_HARD =
+            Number(process.env.GEMINI_PAYLOAD_HARD_BYTES) > 0
+              ? Number(process.env.GEMINI_PAYLOAD_HARD_BYTES)
+              : 500_000;
 
           if (totalBytes > MAX_GEMINI_PAYLOAD_BYTES_HARD) {
             // eslint-disable-next-line no-console
