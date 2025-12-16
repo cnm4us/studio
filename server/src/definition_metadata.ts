@@ -90,41 +90,41 @@ export type StyleDefinitionMetadata = {
     render_domain?: string;
     genre?: string[];
     influences?: string[];
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
   line_and_detail?: {
     line_weight?: string;
     line_quality?: string[];
     detail_level?: string;
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
   color_and_lighting?: {
     color_palette?: string[];
     saturation?: string;
     lighting_style?: string[];
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
   rendering_technique?: {
     shading?: string;
     texture?: string[];
     surface_finish?: string;
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
   composition_and_camera?: {
     camera_style?: string[];
     focal_length?: string;
     composition_notes?: string[];
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
   mood_and_atmosphere?: {
     mood_keywords?: string[];
     atmosphere?: string[];
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
   // Optional reference images category for styles
   reference_images?: {
     style_reference_image_ids?: string[];
-    [key: string]: string | string[] | undefined;
+    [key: string]: string | string[] | number | undefined;
   };
 };
 

@@ -143,8 +143,11 @@ export function StyleDefinitionFormView(props: StyleDefinitionFormViewProps) {
                     inputValue = Array.isArray(rawValue)
                       ? (rawValue as string[]).join(', ')
                       : '';
-                  } else if (typeof rawValue === 'string') {
-                    inputValue = rawValue;
+                  } else if (
+                    typeof rawValue === 'string' ||
+                    typeof rawValue === 'number'
+                  ) {
+                    inputValue = String(rawValue);
                   }
 
                   const inputId = `style-${category.key}-${prop.key}`;
@@ -596,6 +599,44 @@ export function StyleDefinitionFormView(props: StyleDefinitionFormViewProps) {
                             </option>
                           ))}
                         </select>
+                      ) : prop.type === 'number' ? (
+                        <input
+                          id={inputId}
+                          type="number"
+                          value={inputValue}
+                          min={prop.min}
+                          max={prop.max}
+                          step={prop.step ?? 1}
+                          onChange={(e) => {
+                            const text = e.target.value;
+                            const numeric =
+                              text.trim().length > 0
+                                ? Number(text)
+                                : NaN;
+                            setStyleMetadata((prev) => {
+                              const prevCategory =
+                                (prev as any)[
+                                  category.key as keyof StyleDefinitionMetadata
+                                ] as Record<string, unknown> | undefined;
+                              const nextCategory: Record<string, unknown> = {
+                                ...(prevCategory ?? {}),
+                              };
+                              if (!Number.isNaN(numeric)) {
+                                nextCategory[prop.key] = numeric;
+                              } else {
+                                delete nextCategory[prop.key];
+                              }
+                              return {
+                                ...prev,
+                                [category.key]:
+                                  Object.keys(nextCategory).length > 0
+                                    ? nextCategory
+                                    : undefined,
+                              };
+                            });
+                          }}
+                          style={{ width: '100%', padding: '0.35rem' }}
+                        />
                       ) : (
                         <input
                           id={inputId}

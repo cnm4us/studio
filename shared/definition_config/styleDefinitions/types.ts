@@ -1,4 +1,4 @@
-export type StylePropertyType = 'string' | 'enum' | 'tags';
+export type StylePropertyType = 'string' | 'enum' | 'tags' | 'number';
 
 export type StyleOption = {
   value: string;
@@ -12,6 +12,9 @@ export type StyleProperty = {
   description?: string;
   options?: StyleOption[];
   allowCustom?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
 };
 
 export type StyleCategory = {
@@ -25,4 +28,3 @@ export type StyleCategory = {
 export type StyleDefinitionConfig = {
   categories: StyleCategory[];
 };
-
