@@ -83,6 +83,33 @@ export function SpaceView(props: SpaceViewProps) {
     cursor: 'pointer',
   };
 
+  const cloneButtonStyle: React.CSSProperties = {
+    backgroundColor: '#ff8c00',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.2rem 0.6rem',
+    cursor: 'pointer',
+  };
+
+  const editButtonStyle: React.CSSProperties = {
+    backgroundColor: '#0066cc',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.2rem 0.6rem',
+    cursor: 'pointer',
+  };
+
+  const deleteButtonStyle: React.CSSProperties = {
+    backgroundColor: '#cc0000',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.2rem 0.6rem',
+    cursor: 'pointer',
+  };
+
   const renderDefinitionRow = (
     label: string,
     kind: 'character' | 'scene' | 'style' | 'reference_constraint',
@@ -155,7 +182,7 @@ export function SpaceView(props: SpaceViewProps) {
                 <button
                   type="button"
                   onClick={() => onCloneDefinition(kind, item.id)}
-                  style={{ fontSize: '0.8rem' }}
+                  style={{ ...cloneButtonStyle, fontSize: '0.8rem' }}
                 >
                   Clone
                 </button>
@@ -163,7 +190,7 @@ export function SpaceView(props: SpaceViewProps) {
                   <button
                     type="button"
                     onClick={() => onEditDefinition(kind, item.id)}
-                    style={{ fontSize: '0.8rem' }}
+                    style={{ ...editButtonStyle, fontSize: '0.8rem' }}
                   >
                     Edit
                   </button>
@@ -174,7 +201,7 @@ export function SpaceView(props: SpaceViewProps) {
                   disabled={
                     deleteDefinitionLoadingId === item.id || item.isLocked
                   }
-                  style={{ fontSize: '0.8rem' }}
+                  style={{ ...deleteButtonStyle, fontSize: '0.8rem' }}
                 >
                   {deleteDefinitionLoadingId === item.id
                     ? 'Deleting…'
