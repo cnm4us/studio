@@ -58,6 +58,7 @@ type TaskWithProject = {
   description: string | null;
   prompt: string | null;
   status: string;
+  aspect_ratio: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -351,7 +352,17 @@ projectsRouter.post(
         description ?? null,
         prompt ?? null,
       );
-      res.status(201).json({ task });
+      const aspectRatio =
+        (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
+          ? ((task as any).aspect_ratio as string)
+          : null;
+      res.status(201).json({
+        task: {
+          ...task,
+          aspect_ratio: aspectRatio,
+          aspectRatio,
+        },
+      });
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('[tasks] Create task error:', error);
@@ -417,7 +428,17 @@ projectsRouter.get(
           status = 'pending';
         }
 
-        return { ...task, status };
+        const aspectRatio =
+          (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
+            ? ((task as any).aspect_ratio as string)
+            : null;
+
+        return {
+          ...task,
+          status,
+          aspect_ratio: aspectRatio,
+          aspectRatio,
+        };
       });
 
       res.status(200).json({ tasks: projected });
@@ -497,7 +518,17 @@ spaceTasksRouter.post(
         description ?? null,
         prompt ?? null,
       );
-      res.status(201).json({ task });
+      const aspectRatio =
+        (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
+          ? ((task as any).aspect_ratio as string)
+          : null;
+      res.status(201).json({
+        task: {
+          ...task,
+          aspect_ratio: aspectRatio,
+          aspectRatio,
+        },
+      });
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('[space-tasks] Create task error:', error);
@@ -581,7 +612,17 @@ spaceTasksRouter.get(
           status = 'pending';
         }
 
-        return { ...task, status };
+        const aspectRatio =
+          (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
+            ? ((task as any).aspect_ratio as string)
+            : null;
+
+        return {
+          ...task,
+          status,
+          aspect_ratio: aspectRatio,
+          aspectRatio,
+        };
       });
 
       res.status(200).json({ tasks: projected });
@@ -665,6 +706,46 @@ renderedAssetsRouter.patch(
       // eslint-disable-next-line no-console
       console.error('[tasks] Update rendered asset state error:', error);
       res.status(500).json({ error: 'RENDERED_ASSET_UPDATE_FAILED' });
+    }
+  },
+);
+
+// Task metadata updates (e.g., aspect ratio)
+
+taskRenderRouter.patch(
+  '/',
+  async (req: AuthedRequest, res: Response): Promise<void> => {
+    const task = await loadOwnedTaskOr404(req, res);
+    if (!task) {
+      return;
+    }
+
+    const { aspectRatio } = req.body as {
+      aspectRatio?: string | null;
+    };
+
+    const allowedAspectRatios = new Set([
+      '1:1',
+      '3:4',
+      '4:3',
+      '9:16',
+      '16:9',
+    ]);
+    const normalized =
+      aspectRatio && allowedAspectRatios.has(aspectRatio) ? aspectRatio : null;
+
+    try {
+      const db = getDbPool();
+      await db.query('UPDATE tasks SET aspect_ratio = ? WHERE id = ?', [
+        normalized,
+        task.id,
+      ]);
+
+      res.status(200).json({ aspectRatio: normalized });
+    } catch (error: any) {
+      // eslint-disable-next-line no-console
+      console.error('[tasks] Update task metadata error:', error);
+      res.status(500).json({ error: 'TASK_UPDATE_FAILED' });
     }
   },
 );
@@ -1252,6 +1333,25 @@ taskRenderRouter.post(
         }
       }
 
+      const allowedAspectRatios = new Set([
+        '1:1',
+        '3:4',
+        '4:3',
+        '9:16',
+        '16:9',
+      ]);
+      const taskAspectRatio =
+        task.aspect_ratio && allowedAspectRatios.has(task.aspect_ratio)
+          ? task.aspect_ratio
+          : null;
+
+      if (isPromptDebugEnabled() && taskAspectRatio) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[ai] Gemini render aspectRatio for task ${task.id}: ${taskAspectRatio}`,
+        );
+      }
+
       const image = await renderImageWithGemini(
         (() => {
           const textBytes = Buffer.byteLength(finalPrompt, 'utf8');
@@ -1284,7 +1384,7 @@ taskRenderRouter.post(
               `[ai] Gemini payload for task ${task.id} exceeds hard budget; ` +
                 `falling back to text-only (total=${totalBytes} bytes).`,
             );
-            return finalPrompt;
+            return { prompt: finalPrompt, aspectRatio: taskAspectRatio };
           }
 
           if (totalBytes > MAX_GEMINI_PAYLOAD_BYTES_SOFT) {
@@ -1294,9 +1394,16 @@ taskRenderRouter.post(
             );
           }
 
-          return inlineImages.length > 0
-            ? { prompt: finalPrompt, inlineImages, inlineImageTexts }
-            : finalPrompt;
+          if (inlineImages.length > 0) {
+            return {
+              prompt: finalPrompt,
+              inlineImages,
+              inlineImageTexts,
+              aspectRatio: taskAspectRatio,
+            };
+          }
+
+          return { prompt: finalPrompt, aspectRatio: taskAspectRatio };
         })(),
       );
 
@@ -1356,10 +1463,20 @@ taskRenderRouter.post(
       const list = rows as TaskWithProject[];
       const updatedTask = list[0];
 
+      const updatedAspectRatio =
+        updatedTask?.aspect_ratio &&
+        typeof updatedTask.aspect_ratio === 'string'
+          ? updatedTask.aspect_ratio
+          : null;
+
       const signedAsset = maybeSignAssetUrl(asset);
 
       res.status(201).json({
-        task: updatedTask,
+        task: {
+          ...updatedTask,
+          aspect_ratio: updatedAspectRatio,
+          aspectRatio: updatedAspectRatio,
+        },
         renderedAssets: [signedAsset],
       });
     } catch (error: any) {

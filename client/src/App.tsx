@@ -68,6 +68,19 @@ type TaskSummary = {
   description: string | null;
   prompt: string | null;
   status: 'pending' | 'running' | 'completed' | 'failed';
+  aspectRatio?: string | null;
+  aspect_ratio?: string | null;
+};
+
+const normalizeTaskSummary = (task: TaskSummary): TaskSummary => {
+  const aspectRatio =
+    task.aspectRatio ??
+    (typeof task.aspect_ratio === 'string' ? task.aspect_ratio : null);
+  return {
+    ...task,
+    aspectRatio,
+    aspect_ratio: aspectRatio,
+  };
 };
 
 type RenderedAssetSummary = {
@@ -564,7 +577,8 @@ function App() {
         throw new Error('TASKS_FETCH_FAILED');
       }
       const data = (await res.json()) as { tasks: TaskSummary[] };
-      setTasks(data.tasks ?? []);
+      const normalized = (data.tasks ?? []).map((t) => normalizeTaskSummary(t));
+      setTasks(normalized);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load tasks.';
@@ -599,7 +613,8 @@ function App() {
         throw new Error('TASKS_FETCH_FAILED');
       }
       const data = (await res.json()) as { tasks: TaskSummary[] };
-      setTasks(data.tasks ?? []);
+      const normalized = (data.tasks ?? []).map((t) => normalizeTaskSummary(t));
+      setTasks(normalized);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load tasks.';
@@ -2834,7 +2849,8 @@ function App() {
         return;
       }
 
-      setTasks((prev) => [body.task as TaskSummary, ...prev]);
+      const created = normalizeTaskSummary(body.task as TaskSummary);
+      setTasks((prev) => [created, ...prev]);
       setNewTaskName('');
       setNewTaskDescription('');
     } catch (err) {
@@ -2917,8 +2933,9 @@ function App() {
       }
 
       if (body?.task) {
+        const updated = normalizeTaskSummary(body.task as TaskSummary);
         setTasks((prev) =>
-          prev.map((t) => (t.id === body.task?.id ? (body.task as TaskSummary) : t)),
+          prev.map((t) => (t.id === updated.id ? updated : t)),
         );
       }
 
@@ -2934,6 +2951,110 @@ function App() {
       setRenderError(message);
     } finally {
       setRenderingTaskId(null);
+    }
+  };
+
+  const handleTaskAspectRatioChange = async (
+    taskId: number,
+    rawValue: string | null,
+  ): Promise<void> => {
+    if (!user) return;
+
+    const allowed = new Set(['1:1', '3:4', '4:3', '9:16', '16:9']);
+    const normalized =
+      rawValue && allowed.has(rawValue) ? (rawValue as string) : null;
+
+    const previous = tasks.find((t) => t.id === taskId) ?? null;
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              aspectRatio: normalized,
+              aspect_ratio: normalized,
+            }
+          : t,
+      ),
+    );
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ aspectRatio: normalized }),
+      });
+
+      const body = (await res.json().catch(() => null)) as
+        | { aspectRatio?: string | null; error?: string }
+        | null;
+
+      if (!res.ok) {
+        const code = body?.error;
+        if (code === 'UNAUTHENTICATED') {
+          setTasksError('You must be logged in to update tasks.');
+          setUser(null);
+          setSpaces([]);
+          setProjects([]);
+          setTasks([]);
+          setRenderedAssets([]);
+          return;
+        }
+        if (code === 'TASK_NOT_FOUND') {
+          setTasksError('Task not found or not owned by this user.');
+          return;
+        }
+        setTasksError('Failed to update task.');
+
+        if (previous) {
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    aspectRatio: previous.aspectRatio ?? previous.aspect_ratio ?? null,
+                    aspect_ratio:
+                      previous.aspectRatio ?? previous.aspect_ratio ?? null,
+                  }
+                : t,
+            ),
+          );
+        }
+        return;
+      }
+
+      const returned = body?.aspectRatio ?? normalized;
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                aspectRatio: returned ?? null,
+                aspect_ratio: returned ?? null,
+              }
+            : t,
+        ),
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to update task.';
+      setTasksError(message);
+
+      if (previous) {
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId
+              ? {
+                  ...t,
+                  aspectRatio: previous.aspectRatio ?? previous.aspect_ratio ?? null,
+                  aspect_ratio:
+                    previous.aspectRatio ?? previous.aspect_ratio ?? null,
+                }
+              : t,
+          ),
+        );
+      }
     }
   };
 
@@ -3353,6 +3474,7 @@ function App() {
                 assetsLoading={assetsLoading}
                 assetsError={assetsError}
                 renderedAssets={renderedAssets}
+                onChangeTaskAspectRatio={handleTaskAspectRatioChange}
                 onCreateTask={handleCreateTask}
                 onRenderTask={handleRenderTask}
                 onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
@@ -3410,7 +3532,7 @@ function App() {
                 renderError={renderError}
                 assetsLoading={assetsLoading}
                 assetsError={assetsError}
-          renderedAssets={renderedAssets}
+                renderedAssets={renderedAssets}
           onImportDefinitionsToProject={handleImportDefinitionsToProject}
           onCreateTask={handleCreateTask}
           onRenderTask={handleRenderTask}
@@ -3418,6 +3540,7 @@ function App() {
           onRemoveProjectDefinition={handleDeleteProjectDefinition}
           onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
           onDeleteTask={handleDeleteTask}
+          onChangeTaskAspectRatio={handleTaskAspectRatioChange}
         />
       )}
           </>

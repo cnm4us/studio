@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -17,6 +17,7 @@ export type GeminiRenderOptions = {
   prompt: string;
   inlineImages?: GeminiInlineImage[];
   inlineImageTexts?: string[];
+  aspectRatio?: string | null;
 };
 
 export const isPromptDebugEnabled = (): boolean => {
@@ -34,21 +35,48 @@ const getGeminiConfig = (): GeminiConfig => ({
   model: process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3-pro-image-preview',
 });
 
-let geminiClient: GoogleGenerativeAI | null = null;
+let geminiClient: GoogleGenAI | null = null;
+
+const normalizeAspectRatioForGemini = (
+  aspectRatio: string | null | undefined,
+): string | null => {
+  const allowed = new Set(['1:1', '3:4', '4:3', '9:16', '16:9']);
+  if (!aspectRatio) return null;
+  return allowed.has(aspectRatio) ? aspectRatio : null;
+};
+
+const pickImageSizeForAspectRatio = (
+  aspectRatio: string | null,
+): string | undefined => {
+  switch (aspectRatio) {
+    case '1:1':
+      return '1024x1024';
+    case '3:4':
+      return '896x1152';
+    case '4:3':
+      return '1152x896';
+    case '9:16':
+      return '768x1344';
+    case '16:9':
+      return '1344x768';
+    default:
+      return undefined;
+  }
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const getGeminiClient = (): GoogleGenerativeAI | null => {
+export const getGeminiClient = (): GoogleGenAI | null => {
   const cfg = getGeminiConfig();
   if (!cfg.apiKey) {
     return null;
   }
 
   if (!geminiClient) {
-    geminiClient = new GoogleGenerativeAI(cfg.apiKey);
+    geminiClient = new GoogleGenAI({ apiKey: cfg.apiKey });
     // eslint-disable-next-line no-console
-    console.log('[ai] GoogleGenerativeAI client initialized.');
+    console.log('[ai] GoogleGenAI client initialized.');
   }
 
   return geminiClient;
@@ -85,9 +113,22 @@ export const renderImageWithGemini = async (
           prompt: arg.prompt,
           inlineImages: arg.inlineImages ?? [],
           inlineImageTexts: arg.inlineImageTexts ?? [],
+          aspectRatio: arg.aspectRatio ?? null,
         };
 
-  const { prompt, inlineImages, inlineImageTexts } = options;
+  const { prompt, inlineImages, inlineImageTexts, aspectRatio } = options;
+
+  const normalizedAspectRatio = normalizeAspectRatioForGemini(aspectRatio);
+  const imageSize = pickImageSizeForAspectRatio(normalizedAspectRatio);
+
+  const baseConfig: any = {};
+  if (normalizedAspectRatio) {
+    baseConfig.responseModalities = ['IMAGE'];
+    baseConfig.imageConfig = {
+      aspectRatio: normalizedAspectRatio,
+      ...(imageSize ? { imageSize } : {}),
+    };
+  }
 
   if (isPromptDebugEnabled()) {
     const partsForStub: Array<
@@ -125,7 +166,7 @@ export const renderImageWithGemini = async (
       });
     }
 
-    const stub = {
+    const stub: any = {
       model: cfg.model,
       contents: [
         {
@@ -134,6 +175,13 @@ export const renderImageWithGemini = async (
         },
       ],
     };
+
+    if (normalizedAspectRatio) {
+      stub.config = {
+        responseModalities: baseConfig.responseModalities,
+        imageConfig: baseConfig.imageConfig,
+      };
+    }
 
     try {
       const debugDir = path.join(__dirname, '..', 'debug');
@@ -172,13 +220,19 @@ export const renderImageWithGemini = async (
     }
   }
 
-  const model = client.getGenerativeModel({
-    model: cfg.model,
-  });
-
   const result = await (async () => {
     if (!inlineImages || inlineImages.length === 0) {
-      return model.generateContent(prompt);
+      const contents = [
+        {
+          role: 'user' as const,
+          parts: [{ text: prompt }],
+        },
+      ];
+      return client.models.generateContent({
+        model: cfg.model,
+        contents,
+        ...(normalizedAspectRatio ? { config: baseConfig } : {}),
+      } as any);
     }
 
     const parts: Array<{ text: string } | { inlineData: GeminiInlineImage }> =
@@ -213,16 +267,26 @@ export const renderImageWithGemini = async (
       });
     }
 
-    return model.generateContent(parts as any);
+    const contents = [
+      {
+        role: 'user' as const,
+        parts,
+      },
+    ];
+
+    return client.models.generateContent({
+      model: cfg.model,
+      contents,
+      ...(normalizedAspectRatio ? { config: baseConfig } : {}),
+    } as any);
   })();
 
-  const response = result.response;
-  const candidates = response.candidates ?? [];
+  const candidates = result.candidates ?? [];
   const first = candidates[0];
   const parts = first?.content?.parts ?? [];
 
   const blobPart = parts.find(
-    (p) => (p as any).inlineData && (p as any).inlineData.data,
+    (p: any) => p.inlineData && p.inlineData.data,
   ) as
     | {
         inlineData: {

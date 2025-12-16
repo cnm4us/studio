@@ -97,7 +97,7 @@ This runs the compiled `dist/server/src/index.js` and is what you would place be
 
 The render pipeline uses:
 
-- Gemini image model via `@google/generative-ai`.
+- Gemini image model via `@google/genai` with `models.generateContent` and `config.imageConfig` for image settings.
 - S3 for binary storage, fronted by CloudFront for public access.
 
 Environment variables:

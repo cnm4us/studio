@@ -35,6 +35,7 @@ type SpaceTasksViewProps = {
     state: 'draft' | 'approved' | 'archived',
   ) => void;
   onDeleteTask: (taskId: number) => void;
+  onChangeTaskAspectRatio: (taskId: number, aspectRatio: string | null) => void;
 };
 
 export function SpaceTasksView(props: SpaceTasksViewProps) {
@@ -61,6 +62,7 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
     onRenderTask,
     onUpdateRenderedAssetState,
     onDeleteTask,
+    onChangeTaskAspectRatio,
   } = props;
 
   const [castByTaskId, setCastByTaskId] = useState<
@@ -263,14 +265,14 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
                       gap: '0.5rem',
                     }}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        gap: '0.75rem',
-                      }}
-                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          gap: '0.75rem',
+                        }}
+                      >
                       <div>
                         <div
                           style={{
@@ -296,13 +298,48 @@ export function SpaceTasksView(props: SpaceTasksViewProps) {
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'flex-end',
-                          gap: '0.25rem',
+                          gap: '0.3rem',
                           fontSize: '0.85rem',
                           color: '#555',
                           textAlign: 'right',
                         }}
                       >
                         <div>Status: {task.status}</div>
+                        <label
+                          style={{
+                            fontSize: '0.8rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: '0.15rem',
+                          }}
+                        >
+                          <span>Aspect ratio:</span>
+                          <select
+                            value={
+                              (task.aspectRatio ??
+                                (task as any).aspect_ratio ??
+                                '') as string
+                            }
+                            onChange={(event) =>
+                              onChangeTaskAspectRatio(
+                                task.id,
+                                event.target.value || null,
+                              )
+                            }
+                            style={{
+                              padding: '0.15rem 0.4rem',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            <option value="">Auto</option>
+                            <option value="1:1">1:1</option>
+                            <option value="3:4">3:4</option>
+                            <option value="4:3">4:3</option>
+                            <option value="9:16">9:16</option>
+                            <option value="16:9">16:9</option>
+                          </select>
+                        </label>
                         {(() => {
                           const hasApproved = renderedAssets.some(
                             (asset) =>

@@ -9,6 +9,7 @@ export type TaskRecord = {
   name: string;
   description: string | null;
   prompt: string | null;
+  aspect_ratio: string | null;
   status: TaskStatus;
   created_at: Date;
   updated_at: Date;
