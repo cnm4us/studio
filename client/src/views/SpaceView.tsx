@@ -1,5 +1,5 @@
+import type React from 'react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
 import type { DefinitionSummary, ProjectSummary } from '../App';
 
 type SpaceViewProps = {
@@ -74,12 +74,119 @@ export function SpaceView(props: SpaceViewProps) {
     onOpenAssets,
   } = props;
 
-  const [editing, setEditing] = useState<{
-    kind: 'character' | 'scene' | 'style' | 'reference_constraint';
-    id: number;
-    name: string;
-    description: string | null;
-  } | null>(null);
+  const primaryActionButtonStyle: React.CSSProperties = {
+    backgroundColor: '#800020',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.4rem 0.8rem',
+    cursor: 'pointer',
+  };
+
+  const renderDefinitionRow = (
+    label: string,
+    kind: 'character' | 'scene' | 'style' | 'reference_constraint',
+    items: DefinitionSummary[],
+  ): React.ReactElement | null => {
+    if (items.length === 0) {
+      return null;
+    }
+
+    return (
+      <div
+        style={{
+          marginBottom: '1.5rem',
+        }}
+      >
+        <div
+          style={{
+            fontWeight: 600,
+            fontSize: '1.05rem',
+            marginBottom: '0.5rem',
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+          }}
+        >
+          {items.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                flex: '1 1 calc(33.333% - 0.75rem)',
+                minWidth: '220px',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                padding: '0.5rem 0.75rem',
+                backgroundColor: '#fafafa',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  marginBottom: '0.25rem',
+                }}
+              >
+                {item.name}
+              </div>
+              <div
+                style={{
+                  fontSize: '0.8rem',
+                  color: '#777',
+                  marginBottom: '0.4rem',
+                }}
+              >
+                {item.isCanonical ? 'Canonical' : 'Draft'}
+                {item.isLocked ? ' · Locked' : ''}
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '0.4rem',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onCloneDefinition(kind, item.id)}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  Clone
+                </button>
+                {!item.isLocked && (
+                  <button
+                    type="button"
+                    onClick={() => onEditDefinition(kind, item.id)}
+                    style={{ fontSize: '0.8rem' }}
+                  >
+                    Edit
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onDeleteDefinition(kind, item.id)}
+                  disabled={
+                    deleteDefinitionLoadingId === item.id || item.isLocked
+                  }
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  {deleteDefinitionLoadingId === item.id
+                    ? 'Deleting…'
+                    : 'Delete'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -198,20 +305,40 @@ export function SpaceView(props: SpaceViewProps) {
             gap: '0.5rem',
           }}
         >
-          <button type="button" onClick={onCreateCharacter}>
-            Create character
+          <button
+            type="button"
+            onClick={onCreateCharacter}
+            style={primaryActionButtonStyle}
+          >
+            Character +
           </button>
-          <button type="button" onClick={onCreateScene}>
-            Create scene
+          <button
+            type="button"
+            onClick={onCreateScene}
+            style={primaryActionButtonStyle}
+          >
+            Scene +
           </button>
-          <button type="button" onClick={onCreateStyle}>
-            Create style
+          <button
+            type="button"
+            onClick={onCreateStyle}
+            style={primaryActionButtonStyle}
+          >
+            Style +
           </button>
-          <button type="button" onClick={onCreateReferenceConstraint}>
-            Create reference constraint
+          <button
+            type="button"
+            onClick={onCreateReferenceConstraint}
+            style={primaryActionButtonStyle}
+          >
+            Reference Constraint +
           </button>
-          <button type="button" onClick={onOpenAssets}>
-            Add assets
+          <button
+            type="button"
+            onClick={onOpenAssets}
+            style={primaryActionButtonStyle}
+          >
+            Assets +
           </button>
         </div>
         {definitionsError && (
@@ -241,696 +368,15 @@ export function SpaceView(props: SpaceViewProps) {
             spaceScenes.length > 0 ||
             spaceStyles.length > 0 ||
             spaceReferenceConstraints.length > 0) && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr 1fr',
-                gap: '1rem',
-                marginBottom: '1rem',
-              }}
-            >
-              <div>
-                <strong>Characters</strong>
-                <ul
-                  style={{
-                    listStyle: 'none',
-                    paddingLeft: 0,
-                    marginTop: '0.5rem',
-                  }}
-                >
-                  {spaceCharacters.map((c) => {
-                    const isEditing =
-                      editing?.kind === 'character' && editing.id === c.id;
-                    const currentName =
-                      isEditing && editing ? editing.name : c.name;
-                    const currentDescription =
-                      isEditing && editing
-                        ? editing.description ?? ''
-                        : c.description ?? '';
-
-                    return (
-                      <li
-                        key={c.id}
-                        style={{
-                          padding: '0.4rem 0',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                          }}
-                        >
-                          <div>
-                            {isEditing ? (
-                              <>
-                                <input
-                                  type="text"
-                                  value={currentName}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !== 'character' ||
-                                        prev.id !== c.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        name: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    marginBottom: '0.25rem',
-                                  }}
-                                />
-                                <textarea
-                                  value={currentDescription}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !== 'character' ||
-                                        prev.id !== c.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        description: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  rows={2}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    fontSize: '0.85rem',
-                                  }}
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <div style={{ fontWeight: 600 }}>{c.name}</div>
-                                <div
-                                  style={{
-                                    fontSize: '0.8rem',
-                                    color: '#777',
-                                  }}
-                                >
-                                  {c.isCanonical ? 'Canonical' : 'Draft'}
-                                  {c.isLocked ? ' · Locked' : ''}
-                                </div>
-                                {c.description && (
-                                  <div
-                                    style={{
-                                      fontSize: '0.85rem',
-                                      color: '#555',
-                                    }}
-                                  >
-                                    {c.description}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.25rem',
-                              alignItems: 'flex-end',
-                            }}
-                          >
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onCloneDefinition('character', c.id)
-                                }
-                                style={{ fontSize: '0.8rem' }}
-                              >
-                                Clone
-                              </button>
-                              {!c.isLocked && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onEditDefinition('character', c.id)
-                                  }
-                                  style={{ fontSize: '0.8rem' }}
-                                >
-                                  Edit
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onDeleteDefinition('character', c.id)
-                                }
-                                disabled={
-                                  deleteDefinitionLoadingId === c.id ||
-                                  c.isLocked
-                                }
-                                style={{
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                {deleteDefinitionLoadingId === c.id
-                                  ? 'Deleting…'
-                                  : 'Delete'}
-                              </button>
-                            </>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <div>
-                <strong>Scenes</strong>
-                <ul
-                  style={{
-                    listStyle: 'none',
-                    paddingLeft: 0,
-                    marginTop: '0.5rem',
-                  }}
-                >
-                  {spaceScenes.map((s) => {
-                    const isEditing =
-                      editing?.kind === 'scene' && editing.id === s.id;
-                    const currentName =
-                      isEditing && editing ? editing.name : s.name;
-                    const currentDescription =
-                      isEditing && editing
-                        ? editing.description ?? ''
-                        : s.description ?? '';
-
-                    return (
-                      <li
-                        key={s.id}
-                        style={{
-                          padding: '0.4rem 0',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                          }}
-                        >
-                          <div>
-                            {isEditing ? (
-                              <>
-                                <input
-                                  type="text"
-                                  value={currentName}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !== 'scene' ||
-                                        prev.id !== s.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        name: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    marginBottom: '0.25rem',
-                                  }}
-                                />
-                                <textarea
-                                  value={currentDescription}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !== 'scene' ||
-                                        prev.id !== s.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        description: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  rows={2}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    fontSize: '0.85rem',
-                                  }}
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <div style={{ fontWeight: 600 }}>{s.name}</div>
-                                <div
-                                  style={{
-                                    fontSize: '0.8rem',
-                                    color: '#777',
-                                  }}
-                                >
-                                  {s.isCanonical ? 'Canonical' : 'Draft'}
-                                  {s.isLocked ? ' · Locked' : ''}
-                                </div>
-                                {s.description && (
-                                  <div
-                                    style={{
-                                      fontSize: '0.85rem',
-                                      color: '#555',
-                                    }}
-                                  >
-                                    {s.description}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.25rem',
-                              alignItems: 'flex-end',
-                            }}
-                          >
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onCloneDefinition('scene', s.id)
-                                }
-                                style={{ fontSize: '0.8rem' }}
-                              >
-                                Clone
-                              </button>
-                              {!s.isLocked && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onEditDefinition('scene', s.id)
-                                  }
-                                  style={{ fontSize: '0.8rem' }}
-                                >
-                                  Edit
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onDeleteDefinition('scene', s.id)
-                                }
-                                disabled={
-                                  deleteDefinitionLoadingId === s.id ||
-                                  s.isLocked
-                                }
-                                style={{
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                {deleteDefinitionLoadingId === s.id
-                                  ? 'Deleting…'
-                                  : 'Delete'}
-                              </button>
-                            </>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <div>
-                <strong>Styles</strong>
-                <ul
-                  style={{
-                    listStyle: 'none',
-                    paddingLeft: 0,
-                    marginTop: '0.5rem',
-                  }}
-                >
-                  {spaceStyles.map((style) => {
-                    const isEditing =
-                      editing?.kind === 'style' && editing.id === style.id;
-                    const currentName =
-                      isEditing && editing ? editing.name : style.name;
-                    const currentDescription =
-                      isEditing && editing
-                        ? editing.description ?? ''
-                        : style.description ?? '';
-
-                    return (
-                      <li
-                        key={style.id}
-                        style={{
-                          padding: '0.4rem 0',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                          }}
-                        >
-                          <div>
-                            {isEditing ? (
-                              <>
-                                <input
-                                  type="text"
-                                  value={currentName}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !== 'style' ||
-                                        prev.id !== style.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        name: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    marginBottom: '0.25rem',
-                                  }}
-                                />
-                                <textarea
-                                  value={currentDescription}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !== 'style' ||
-                                        prev.id !== style.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        description: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  rows={2}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    fontSize: '0.85rem',
-                                  }}
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <div style={{ fontWeight: 600 }}>
-                                  {style.name}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: '0.8rem',
-                                    color: '#777',
-                                  }}
-                                >
-                                  {style.isCanonical ? 'Canonical' : 'Draft'}
-                                  {style.isLocked ? ' · Locked' : ''}
-                                </div>
-                                {style.description && (
-                                  <div
-                                    style={{
-                                      fontSize: '0.85rem',
-                                      color: '#555',
-                                    }}
-                                  >
-                                    {style.description}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.25rem',
-                              alignItems: 'flex-end',
-                            }}
-                          >
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onCloneDefinition('style', style.id)
-                                }
-                                style={{ fontSize: '0.8rem' }}
-                              >
-                                Clone
-                              </button>
-                              {!style.isLocked && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onEditDefinition('style', style.id)
-                                  }
-                                  style={{ fontSize: '0.8rem' }}
-                                >
-                                  Edit
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onDeleteDefinition('style', style.id)
-                                }
-                                disabled={
-                                  deleteDefinitionLoadingId === style.id ||
-                                  style.isLocked
-                                }
-                                style={{
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                {deleteDefinitionLoadingId === style.id
-                                  ? 'Deleting…'
-                                  : 'Delete'}
-                              </button>
-                            </>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <div>
-                <strong>Reference constraints</strong>
-                <ul
-                  style={{
-                    listStyle: 'none',
-                    paddingLeft: 0,
-                    marginTop: '0.5rem',
-                  }}
-                >
-                  {spaceReferenceConstraints.map((constraint) => {
-                    const isEditing =
-                      editing?.kind === 'reference_constraint' &&
-                      editing.id === constraint.id;
-                    const currentName =
-                      isEditing && editing ? editing.name : constraint.name;
-                    const currentDescription =
-                      isEditing && editing
-                        ? editing.description ?? ''
-                        : constraint.description ?? '';
-
-                    return (
-                      <li
-                        key={constraint.id}
-                        style={{
-                          padding: '0.4rem 0',
-                          borderBottom: '1px solid #eee',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                          }}
-                        >
-                          <div>
-                            {isEditing ? (
-                              <>
-                                <input
-                                  type="text"
-                                  value={currentName}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !==
-                                          'reference_constraint' ||
-                                        prev.id !== constraint.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        name: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    marginBottom: '0.25rem',
-                                  }}
-                                />
-                                <textarea
-                                  value={currentDescription}
-                                  onChange={(e) =>
-                                    setEditing((prev) => {
-                                      if (
-                                        !prev ||
-                                        prev.kind !==
-                                          'reference_constraint' ||
-                                        prev.id !== constraint.id
-                                      ) {
-                                        return prev;
-                                      }
-                                      return {
-                                        ...prev,
-                                        description: e.target.value,
-                                      };
-                                    })
-                                  }
-                                  rows={2}
-                                  style={{
-                                    width: '100%',
-                                    padding: '0.25rem',
-                                    fontSize: '0.85rem',
-                                  }}
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <div style={{ fontWeight: 600 }}>
-                                  {constraint.name}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: '0.8rem',
-                                    color: '#777',
-                                  }}
-                                >
-                                  {constraint.isCanonical
-                                    ? 'Canonical'
-                                    : 'Draft'}
-                                  {constraint.isLocked ? ' · Locked' : ''}
-                                </div>
-                                {constraint.description && (
-                                  <div
-                                    style={{
-                                      fontSize: '0.85rem',
-                                      color: '#555',
-                                    }}
-                                  >
-                                    {constraint.description}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '0.25rem',
-                              alignItems: 'flex-end',
-                            }}
-                          >
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onCloneDefinition(
-                                    'reference_constraint',
-                                    constraint.id,
-                                  )
-                                }
-                                style={{ fontSize: '0.8rem' }}
-                              >
-                                Clone
-                              </button>
-                              {!constraint.isLocked && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onEditDefinition(
-                                      'reference_constraint',
-                                      constraint.id,
-                                    )
-                                  }
-                                  style={{ fontSize: '0.8rem' }}
-                                >
-                                  Edit
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onDeleteDefinition(
-                                    'reference_constraint',
-                                    constraint.id,
-                                  )
-                                }
-                                disabled={
-                                  deleteDefinitionLoadingId ===
-                                    constraint.id || constraint.isLocked
-                                }
-                                style={{
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                {deleteDefinitionLoadingId === constraint.id
-                                  ? 'Deleting…'
-                                  : 'Delete'}
-                              </button>
-                            </>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+            <div style={{ marginBottom: '1rem' }}>
+              {renderDefinitionRow('Characters', 'character', spaceCharacters)}
+              {renderDefinitionRow('Scenes', 'scene', spaceScenes)}
+              {renderDefinitionRow('Styles', 'style', spaceStyles)}
+              {renderDefinitionRow(
+                'Reference Constraints',
+                'reference_constraint',
+                spaceReferenceConstraints,
+              )}
             </div>
           )}
       </div>
