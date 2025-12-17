@@ -3,6 +3,7 @@ import {
   HarmBlockThreshold,
   HarmCategory,
   type SafetySetting,
+  ApiError,
 } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
@@ -131,6 +132,118 @@ const pickImageSizeForAspectRatio = (
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+type GeminiDebugError = {
+  source: 'genai';
+  model: string;
+  timestamp: string;
+  upstreamStatus?: number;
+  upstreamMessage?: string;
+  category?: string;
+  error: {
+    name?: string;
+    message?: string;
+    status?: number;
+    code?: string | number;
+    type?: string;
+    stack?: string;
+  };
+};
+
+const categorizeGeminiError = (status?: number): string | undefined => {
+  if (status == null) return undefined;
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 429) return 'rate_limit';
+  if (status >= 400 && status < 500) return 'bad_request';
+  if (status >= 500 && status < 600) return 'upstream_internal';
+  return 'unknown';
+};
+
+const buildGeminiDebugError = (
+  err: unknown,
+  model: string,
+): GeminiDebugError => {
+  const timestamp = new Date().toISOString();
+
+  let upstreamStatus: number | undefined;
+  let upstreamMessage: string | undefined;
+  let name: string | undefined;
+  let message: string | undefined;
+  let status: number | undefined;
+  let code: string | number | undefined;
+  let type: string | undefined;
+  let stack: string | undefined;
+
+  if (err instanceof ApiError) {
+    upstreamStatus = err.status;
+    upstreamMessage = err.message;
+    name = err.name;
+    message = err.message;
+    status = err.status;
+    stack = err.stack;
+  } else if (err instanceof Error) {
+    const anyErr = err as any;
+    name = anyErr.name;
+    message = anyErr.message;
+    stack = anyErr.stack;
+    if (typeof (anyErr as any).status === 'number') {
+      upstreamStatus = (anyErr as any).status;
+      status = (anyErr as any).status;
+    }
+    if (typeof (anyErr as any).code === 'string' || typeof (anyErr as any).code === 'number') {
+      code = (anyErr as any).code;
+    }
+    if (typeof (anyErr as any).type === 'string') {
+      type = (anyErr as any).type;
+    }
+  }
+
+  const category = categorizeGeminiError(upstreamStatus);
+
+  return {
+    source: 'genai',
+    model,
+    timestamp,
+    upstreamStatus,
+    upstreamMessage,
+    category,
+    error: {
+      name,
+      message,
+      status,
+      code,
+      type,
+      stack,
+    },
+  };
+};
+
+const writeGeminiErrorDebugFile = (
+  debugError: GeminiDebugError,
+  requestStub: any,
+): void => {
+  try {
+    const debugDir = path.join(__dirname, '..', 'debug');
+    if (!fs.existsSync(debugDir)) {
+      fs.mkdirSync(debugDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `gemini-error-${timestamp}.json`;
+    const filePath = path.join(debugDir, filename);
+    const payload = {
+      model: debugError.model,
+      timestamp: debugError.timestamp,
+      request: requestStub,
+      error: debugError,
+    };
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    // eslint-disable-next-line no-console
+    console.log(`[ai] Gemini error stub written to ${filePath}`);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[ai] Failed to write Gemini error debug file:', err);
+  }
+};
+
 export const getGeminiClient = (): GoogleGenAI | null => {
   const cfg = getGeminiConfig();
   if (!cfg.apiKey) {
@@ -250,6 +363,8 @@ export const renderImageWithGemini = async (
       stub.config = baseConfig;
     }
 
+    const requestStub = stub;
+
     try {
       const debugDir = path.join(__dirname, '..', 'debug');
       if (!fs.existsSync(debugDir)) {
@@ -258,7 +373,7 @@ export const renderImageWithGemini = async (
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `gemini-request-${timestamp}.json`;
       const filePath = path.join(debugDir, filename);
-      fs.writeFileSync(filePath, JSON.stringify(stub, null, 2), 'utf8');
+      fs.writeFileSync(filePath, JSON.stringify(requestStub, null, 2), 'utf8');
       // eslint-disable-next-line no-console
       console.log(`[ai] Gemini request stub written to ${filePath}`);
     } catch (err) {
@@ -288,64 +403,127 @@ export const renderImageWithGemini = async (
   }
 
   const result = await (async () => {
-    if (!inlineImages || inlineImages.length === 0) {
+    try {
+      if (!inlineImages || inlineImages.length === 0) {
+        const contents = [
+          {
+            role: 'user' as const,
+            parts: [{ text: prompt }],
+          },
+        ];
+        return await client.models.generateContent({
+          model: cfg.model,
+          contents,
+          ...(hasConfig ? { config: baseConfig } : {}),
+        } as any);
+      }
+
+      const parts: Array<{ text: string } | { inlineData: GeminiInlineImage }> =
+        [];
+
+      if (
+        inlineImageTexts &&
+        inlineImageTexts.length === inlineImages.length
+      ) {
+        parts.push({ text: prompt });
+        inlineImages.forEach((img, index) => {
+          const text = inlineImageTexts[index];
+          if (text && text.trim().length > 0) {
+            parts.push({ text });
+          }
+          parts.push({
+            inlineData: {
+              data: img.data,
+              mimeType: img.mimeType,
+            },
+          });
+        });
+      } else {
+        parts.push({ text: prompt });
+        inlineImages.forEach((img) => {
+          parts.push({
+            inlineData: {
+              data: img.data,
+              mimeType: img.mimeType,
+            },
+          });
+        });
+      }
+
       const contents = [
         {
           role: 'user' as const,
-          parts: [{ text: prompt }],
+          parts,
         },
       ];
-      return client.models.generateContent({
+
+      return await client.models.generateContent({
         model: cfg.model,
         contents,
         ...(hasConfig ? { config: baseConfig } : {}),
       } as any);
-    }
+    } catch (err) {
+      if (isPromptDebugEnabled()) {
+        const debugError = buildGeminiDebugError(err, cfg.model);
+        // eslint-disable-next-line no-console
+        console.error(
+          `[ai] Gemini error (model=${cfg.model}, status=${debugError.upstreamStatus}, category=${debugError.category}):`,
+          debugError.error,
+        );
+        const partsForStub: Array<
+          { text: string } | { inlineData: GeminiInlineImage }
+        > = [];
 
-    const parts: Array<{ text: string } | { inlineData: GeminiInlineImage }> =
-      [];
-
-    if (
-      inlineImageTexts &&
-      inlineImageTexts.length === inlineImages.length
-    ) {
-      parts.push({ text: prompt });
-      inlineImages.forEach((img, index) => {
-        const text = inlineImageTexts[index];
-        if (text && text.trim().length > 0) {
-          parts.push({ text });
+        if (!inlineImages || inlineImages.length === 0) {
+          partsForStub.push({ text: prompt });
+        } else if (
+          inlineImageTexts &&
+          inlineImageTexts.length === inlineImages.length
+        ) {
+          partsForStub.push({ text: prompt });
+          inlineImages.forEach((img, index) => {
+            const text = inlineImageTexts[index];
+            if (text && text.trim().length > 0) {
+              partsForStub.push({ text });
+            }
+            partsForStub.push({
+              inlineData: {
+                mimeType: img.mimeType,
+                data: `<base64 ${img.data.length} chars redacted>`,
+              },
+            });
+          });
+        } else {
+          partsForStub.push({ text: prompt });
+          (inlineImages ?? []).forEach((img) => {
+            partsForStub.push({
+              inlineData: {
+                mimeType: img.mimeType,
+                data: `<base64 ${img.data.length} chars redacted>`,
+              },
+            });
+          });
         }
-        parts.push({
-          inlineData: {
-            data: img.data,
-            mimeType: img.mimeType,
-          },
-        });
-      });
-    } else {
-      parts.push({ text: prompt });
-      inlineImages.forEach((img) => {
-        parts.push({
-          inlineData: {
-            data: img.data,
-            mimeType: img.mimeType,
-          },
-        });
-      });
+
+        const requestStub: any = {
+          model: cfg.model,
+          contents: [
+            {
+              role: 'user',
+              parts: partsForStub,
+            },
+          ],
+        };
+
+        if (hasConfig) {
+          requestStub.config = baseConfig;
+        }
+
+        writeGeminiErrorDebugFile(debugError, requestStub);
+      }
+
+      throw err;
     }
-
-    const contents = [
-      {
-        role: 'user' as const,
-        parts,
-      },
-    ];
-
-    return client.models.generateContent({
-      model: cfg.model,
-      contents,
-      ...(hasConfig ? { config: baseConfig } : {}),
-    } as any);
   })();
 
   const candidates = result.candidates ?? [];
@@ -364,6 +542,72 @@ export const renderImageWithGemini = async (
     | undefined;
 
   if (!blobPart) {
+    if (isPromptDebugEnabled()) {
+      const baseError = new Error('GEMINI_NO_IMAGE_RETURNED');
+      const debugErrorBase = buildGeminiDebugError(baseError, cfg.model);
+      const debugError: GeminiDebugError = {
+        ...debugErrorBase,
+        category: debugErrorBase.category ?? 'no_image_returned',
+      };
+
+      // eslint-disable-next-line no-console
+      console.error(
+        `[ai] Gemini error (model=${cfg.model}, status=${debugError.upstreamStatus}, category=${debugError.category}):`,
+        debugError.error,
+      );
+
+      const partsForStub: Array<
+        { text: string } | { inlineData: GeminiInlineImage }
+      > = [];
+
+      if (!inlineImages || inlineImages.length === 0) {
+        partsForStub.push({ text: prompt });
+      } else if (
+        inlineImageTexts &&
+        inlineImageTexts.length === inlineImages.length
+      ) {
+        partsForStub.push({ text: prompt });
+        inlineImages.forEach((img, index) => {
+          const text = inlineImageTexts[index];
+          if (text && text.trim().length > 0) {
+            partsForStub.push({ text });
+          }
+          partsForStub.push({
+            inlineData: {
+              mimeType: img.mimeType,
+              data: `<base64 ${img.data.length} chars redacted>`,
+            },
+          });
+        });
+      } else {
+        partsForStub.push({ text: prompt });
+        (inlineImages ?? []).forEach((img) => {
+          partsForStub.push({
+            inlineData: {
+              mimeType: img.mimeType,
+              data: `<base64 ${img.data.length} chars redacted>`,
+            },
+          });
+        });
+      }
+
+      const requestStub: any = {
+        model: cfg.model,
+        contents: [
+          {
+            role: 'user',
+            parts: partsForStub,
+          },
+        ],
+      };
+
+      if (hasConfig) {
+        requestStub.config = baseConfig;
+      }
+
+      writeGeminiErrorDebugFile(debugError, requestStub);
+    }
+
     throw new Error('GEMINI_NO_IMAGE_RETURNED');
   }
 
