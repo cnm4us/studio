@@ -70,6 +70,24 @@ type TaskSummary = {
   status: 'pending' | 'running' | 'completed' | 'failed';
   aspectRatio?: string | null;
   aspect_ratio?: string | null;
+  sfxMetadata?: {
+    text: string | null;
+    position: string | null;
+    style: string | null;
+    instructions: string | null;
+  } | null;
+  speechMetadata?: {
+    text: string | null;
+    position: string | null;
+    style: string | null;
+    instructions: string | null;
+  } | null;
+  thoughtMetadata?: {
+    text: string | null;
+    position: string | null;
+    style: string | null;
+    instructions: string | null;
+  } | null;
 };
 
 const normalizeTaskSummary = (task: TaskSummary): TaskSummary => {
@@ -3058,6 +3076,196 @@ function App() {
     }
   };
 
+  const handleUpdateTaskTextElements = async (
+    taskId: number,
+    updates: {
+      sfx?: {
+        text?: string | null;
+        position?: string | null;
+        style?: string | null;
+      } | null;
+      speech?: {
+        text?: string | null;
+        position?: string | null;
+        style?: string | null;
+      } | null;
+      thought?: {
+        text?: string | null;
+        position?: string | null;
+        style?: string | null;
+      } | null;
+    },
+  ): Promise<void> => {
+    if (!user) return;
+
+    setTasksError(null);
+
+    const previous = tasks.find((t) => t.id === taskId) ?? null;
+
+    const body: {
+      sfxMetadata?: TaskSummary['sfxMetadata'];
+      speechMetadata?: TaskSummary['speechMetadata'];
+      thoughtMetadata?: TaskSummary['thoughtMetadata'];
+    } = {};
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'sfx')) {
+      const next = updates.sfx;
+      if (!next) {
+        body.sfxMetadata = { text: null, position: null, style: null, instructions: null };
+      } else {
+        body.sfxMetadata = {
+          text: next.text ?? null,
+          position: next.position ?? null,
+          style: next.style ?? null,
+          instructions: null,
+        };
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'speech')) {
+      const next = updates.speech;
+      if (!next) {
+        body.speechMetadata = { text: null, position: null, style: null, instructions: null };
+      } else {
+        body.speechMetadata = {
+          text: next.text ?? null,
+          position: next.position ?? null,
+          style: next.style ?? null,
+          instructions: null,
+        };
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'thought')) {
+      const next = updates.thought;
+      if (!next) {
+        body.thoughtMetadata = { text: null, position: null, style: null, instructions: null };
+      } else {
+        body.thoughtMetadata = {
+          text: next.text ?? null,
+          position: next.position ?? null,
+          style: next.style ?? null,
+          instructions: null,
+        };
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+
+      const json = (await res.json().catch(() => null)) as
+        | {
+            aspectRatio?: string | null;
+            sfxMetadata?: TaskSummary['sfxMetadata'];
+            speechMetadata?: TaskSummary['speechMetadata'];
+            thoughtMetadata?: TaskSummary['thoughtMetadata'];
+            error?: string;
+          }
+        | null;
+
+      if (!res.ok) {
+        const code = json?.error;
+        if (code === 'UNAUTHENTICATED') {
+          setTasksError('You must be logged in to update tasks.');
+          setUser(null);
+          setSpaces([]);
+          setProjects([]);
+          setTasks([]);
+          setRenderedAssets([]);
+          return;
+        }
+        if (code === 'TASK_NOT_FOUND') {
+          setTasksError('Task not found or not owned by this user.');
+          return;
+        }
+        setTasksError('Failed to update task.');
+
+        if (previous) {
+          setTasks((prev) =>
+            prev.map((t) => (t.id === taskId ? previous : t)),
+          );
+        }
+        return;
+      }
+
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== taskId) return t;
+          const next: TaskSummary = { ...t };
+          if (Object.prototype.hasOwnProperty.call(json ?? {}, 'aspectRatio')) {
+            const ar = json?.aspectRatio ?? null;
+            next.aspectRatio = ar;
+            next.aspect_ratio = ar;
+          }
+          if (
+            Object.prototype.hasOwnProperty.call(json ?? {}, 'sfxMetadata')
+          ) {
+            next.sfxMetadata =
+              json?.sfxMetadata &&
+              (json.sfxMetadata.text ||
+                json.sfxMetadata.position ||
+                json.sfxMetadata.style ||
+                json.sfxMetadata.instructions)
+                ? {
+                    text: json.sfxMetadata.text ?? null,
+                    position: json.sfxMetadata.position ?? null,
+                    style: json.sfxMetadata.style ?? null,
+                    instructions: json.sfxMetadata.instructions ?? null,
+                  }
+                : null;
+          }
+          if (
+            Object.prototype.hasOwnProperty.call(json ?? {}, 'speechMetadata')
+          ) {
+            next.speechMetadata =
+              json?.speechMetadata &&
+              (json.speechMetadata.text ||
+                json.speechMetadata.position ||
+                json.speechMetadata.style ||
+                json.speechMetadata.instructions)
+                ? {
+                    text: json.speechMetadata.text ?? null,
+                    position: json.speechMetadata.position ?? null,
+                    style: json.speechMetadata.style ?? null,
+                    instructions: json.speechMetadata.instructions ?? null,
+                  }
+                : null;
+          }
+          if (
+            Object.prototype.hasOwnProperty.call(json ?? {}, 'thoughtMetadata')
+          ) {
+            next.thoughtMetadata =
+              json?.thoughtMetadata &&
+              (json.thoughtMetadata.text ||
+                json.thoughtMetadata.position ||
+                json.thoughtMetadata.style ||
+                json.thoughtMetadata.instructions)
+                ? {
+                    text: json.thoughtMetadata.text ?? null,
+                    position: json.thoughtMetadata.position ?? null,
+                    style: json.thoughtMetadata.style ?? null,
+                    instructions: json.thoughtMetadata.instructions ?? null,
+                  }
+                : null;
+          }
+          return next;
+        }),
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to update task.';
+      setTasksError(message);
+      if (previous) {
+        setTasks((prev) =>
+          prev.map((t) => (t.id === taskId ? previous : t)),
+        );
+      }
+    }
+  };
+
   const handleUpdateRenderedAssetState = async (
     assetId: number,
     state: 'draft' | 'approved' | 'archived',
@@ -3479,6 +3687,7 @@ function App() {
                 onRenderTask={handleRenderTask}
                 onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
                 onDeleteTask={handleDeleteTask}
+                onUpdateTaskTextElements={handleUpdateTaskTextElements}
               />
             )}
 
@@ -3541,6 +3750,7 @@ function App() {
           onUpdateRenderedAssetState={handleUpdateRenderedAssetState}
           onDeleteTask={handleDeleteTask}
           onChangeTaskAspectRatio={handleTaskAspectRatioChange}
+          onUpdateTaskTextElements={handleUpdateTaskTextElements}
         />
       )}
           </>

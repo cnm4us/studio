@@ -1,6 +1,11 @@
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import type { DefinitionSummary } from '../App';
+import {
+  defaultSfxInstructionsTemplate,
+  defaultSpeechBubbleInstructionsTemplate,
+  defaultThoughtBubbleInstructionsTemplate,
+} from '../../../shared/promptElementsConfig.js';
 
 type ProjectViewProps = {
   importLoading: boolean;
@@ -53,6 +58,26 @@ type ProjectViewProps = {
     kind: 'character' | 'scene' | 'style' | 'reference_constraint',
     definitionId: number,
   ) => void;
+  onUpdateTaskTextElements: (
+    taskId: number,
+    updates: {
+      sfx?: {
+        text?: string | null;
+        position?: string | null;
+        style?: string | null;
+      } | null;
+      speech?: {
+        text?: string | null;
+        position?: string | null;
+        style?: string | null;
+      } | null;
+      thought?: {
+        text?: string | null;
+        position?: string | null;
+        style?: string | null;
+      } | null;
+    },
+  ) => void;
 };
 
 export function ProjectView(props: ProjectViewProps) {
@@ -91,6 +116,7 @@ export function ProjectView(props: ProjectViewProps) {
     onUpdateRenderedAssetState,
     onDeleteTask,
     onChangeTaskAspectRatio,
+    onUpdateTaskTextElements,
   } = props;
 
   const [selectedSpaceCharacterId, setSelectedSpaceCharacterId] = useState<
@@ -205,6 +231,16 @@ export function ProjectView(props: ProjectViewProps) {
       };
     });
   };
+
+  const [activeTextElement, setActiveTextElement] = useState<{
+    taskId: number;
+    kind: 'sfx' | 'speech' | 'thought';
+  } | null>(null);
+  const [textElementDraft, setTextElementDraft] = useState<{
+    text: string;
+    position: string;
+    style: string;
+  }>({ text: '', position: '', style: '' });
 
   return (
     <div
@@ -1307,13 +1343,89 @@ export function ProjectView(props: ProjectViewProps) {
                               }))
                             }
                             rows={2}
-                            style={{
-                              width: '100%',
-                              padding: '0.35rem',
-                              fontSize: '0.85rem',
-                            }}
-                          />
-                        </div>
+                          style={{
+                            width: '100%',
+                            padding: '0.35rem',
+                            fontSize: '0.85rem',
+                          }}
+                        />
+                      </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          flexWrap: 'wrap',
+                          gap: '0.4rem',
+                          marginTop: '0.35rem',
+                        }}
+                      >
+                        {(['sfx', 'speech', 'thought'] as const).map((kind) => {
+                          const meta =
+                            kind === 'sfx'
+                              ? task.sfxMetadata ?? null
+                              : kind === 'speech'
+                              ? task.speechMetadata ?? null
+                              : task.thoughtMetadata ?? null;
+                          const currentInstructions = meta?.instructions ?? null;
+                          const isOn =
+                            typeof currentInstructions === 'string' &&
+                            currentInstructions.trim().length > 0;
+                          const label =
+                            kind === 'sfx'
+                              ? 'SFX'
+                              : kind === 'speech'
+                              ? 'Speech'
+                              : 'Thought';
+                          const backgroundColor = isOn ? '#2e7d32' : '#1565c0';
+
+                              return (
+                                <button
+                                  key={kind}
+                                  type="button"
+                                  onClick={() => {
+                                    const metaForKind =
+                                      kind === 'sfx'
+                                        ? task.sfxMetadata ?? null
+                                        : kind === 'speech'
+                                        ? task.speechMetadata ?? null
+                                        : task.thoughtMetadata ?? null;
+                                    const nextText = metaForKind?.text ?? '';
+                                    const nextPosition =
+                                      metaForKind?.position ?? '';
+                                    const nextStyle =
+                                      metaForKind?.style ??
+                                      (kind === 'sfx'
+                                        ? defaultSfxInstructionsTemplate
+                                        : kind === 'speech'
+                                        ? defaultSpeechBubbleInstructionsTemplate
+                                        : defaultThoughtBubbleInstructionsTemplate);
+
+                                    setActiveTextElement({
+                                      taskId: task.id,
+                                      kind,
+                                    });
+                                    setTextElementDraft({
+                                      text: nextText,
+                                      position: nextPosition,
+                                      style: nextStyle,
+                                    });
+                                  }}
+                              style={{
+                                padding: '0.25rem 0.6rem',
+                                borderRadius: '999px',
+                                border: 'none',
+                                backgroundColor,
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div
@@ -1783,6 +1895,268 @@ export function ProjectView(props: ProjectViewProps) {
                   Delete
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTextElement && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+          }}
+          onClick={() => setActiveTextElement(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              backgroundColor: '#fff',
+              padding: '0.75rem 0.9rem',
+              borderRadius: '8px',
+              maxWidth: '560px',
+              width: '90vw',
+              maxHeight: '80vh',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setActiveTextElement(null)}
+              aria-label="Close"
+              style={{
+                position: 'absolute',
+                top: '0.4rem',
+                right: '0.4rem',
+                border: '2px solid #fff',
+                backgroundColor: '#000',
+                cursor: 'pointer',
+                fontSize: '1.1rem',
+                lineHeight: 1,
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                padding: 0,
+                boxSizing: 'border-box',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 700,
+              }}
+            >
+              ×
+            </button>
+            <h4
+              style={{
+                marginTop: 0,
+                marginBottom: '0.5rem',
+              }}
+            >
+              {activeTextElement.kind === 'sfx'
+                ? 'SFX instructions'
+                : activeTextElement.kind === 'speech'
+                ? 'Speech bubble instructions'
+                : 'Thought bubble instructions'}
+            </h4>
+            <p
+              style={{
+                marginTop: 0,
+                marginBottom: '0.5rem',
+                fontSize: '0.85rem',
+                color: '#555',
+              }}
+            >
+              Describe the text, style, and position. Clearing this box and
+              saving will disable this element for the task.
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '0.25rem',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Text content
+                </label>
+                <input
+                  type="text"
+                  value={textElementDraft.text}
+                  onChange={(event) =>
+                    setTextElementDraft((prev) => ({
+                      ...prev,
+                      text: event.target.value,
+                    }))
+                  }
+                  style={{
+                    width: '100%',
+                    padding: '0.35rem',
+                    fontSize: '0.85rem',
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '0.25rem',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Position
+                </label>
+                <input
+                  type="text"
+                  value={textElementDraft.position}
+                  onChange={(event) =>
+                    setTextElementDraft((prev) => ({
+                      ...prev,
+                      position: event.target.value,
+                    }))
+                  }
+                  placeholder="e.g., top-right near Eve's head"
+                  style={{
+                    width: '100%',
+                    padding: '0.35rem',
+                    fontSize: '0.85rem',
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '0.25rem',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Style and appearance
+                </label>
+                <textarea
+                  value={textElementDraft.style}
+                  onChange={(event) =>
+                    setTextElementDraft((prev) => ({
+                      ...prev,
+                      style: event.target.value,
+                    }))
+                  }
+                  rows={6}
+                  style={{
+                    width: '100%',
+                    padding: '0.4rem',
+                    fontSize: '0.85rem',
+                  }}
+                />
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.5rem',
+                marginTop: '0.6rem',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setActiveTextElement(null)}
+                style={{
+                  padding: '0.3rem 0.8rem',
+                  borderRadius: '4px',
+                  border: '1px solid #888',
+                  backgroundColor: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!activeTextElement) return;
+                  const updates: {
+                    sfx?: {
+                      text?: string | null;
+                      position?: string | null;
+                      style?: string | null;
+                    } | null;
+                    speech?: {
+                      text?: string | null;
+                      position?: string | null;
+                      style?: string | null;
+                    } | null;
+                    thought?: {
+                      text?: string | null;
+                      position?: string | null;
+                      style?: string | null;
+                    } | null;
+                  } = {};
+                  const text = textElementDraft.text.trim();
+                  const position = textElementDraft.position.trim();
+                  const style = textElementDraft.style.trim();
+
+                  if (activeTextElement.kind === 'sfx') {
+                    updates.sfx =
+                      text || position || style
+                        ? {
+                            text: text || null,
+                            position: position || null,
+                            style: style || null,
+                          }
+                        : null;
+                  } else if (activeTextElement.kind === 'speech') {
+                    updates.speech =
+                      text || position || style
+                        ? {
+                            text: text || null,
+                            position: position || null,
+                            style: style || null,
+                          }
+                        : null;
+                  } else {
+                    updates.thought =
+                      text || position || style
+                        ? {
+                            text: text || null,
+                            position: position || null,
+                            style: style || null,
+                          }
+                        : null;
+                  }
+                  onUpdateTaskTextElements(activeTextElement.taskId, updates);
+                  setActiveTextElement(null);
+                }}
+                style={{
+                  padding: '0.3rem 0.8rem',
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: '#2e7d32',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>

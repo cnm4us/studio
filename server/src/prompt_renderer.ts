@@ -42,6 +42,9 @@ export type RenderPromptOptions = {
   referenceConstraint?: ReferenceConstraintMetadata | null;
   referenceConstraintName?: string | null;
   imageReferences?: ResolvedPromptImageRef[];
+  sfxInstructions?: string | null;
+  speechInstructions?: string | null;
+  thoughtInstructions?: string | null;
 };
 
 const SECTION_IMAGE_REFERENCES = 'IMAGE REFERENCES';
@@ -553,6 +556,9 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
     referenceConstraint,
     referenceConstraintName,
     imageReferences,
+    sfxInstructions,
+    speechInstructions,
+    thoughtInstructions,
   } = options;
 
   const sections: string[] = [];
@@ -609,10 +615,36 @@ export const renderPrompt = (options: RenderPromptOptions): string => {
 
   // 7. TEXT ELEMENTS (speech / thought bubbles)
   sections.push(
-    [
-      SECTION_TEXT_ELEMENTS,
-      '- No speech or thought bubbles.',
-    ].join('\n'),
+    (() => {
+      const sfx = typeof sfxInstructions === 'string'
+        ? sfxInstructions.trim()
+        : '';
+      const speech = typeof speechInstructions === 'string'
+        ? speechInstructions.trim()
+        : '';
+      const thought = typeof thoughtInstructions === 'string'
+        ? thoughtInstructions.trim()
+        : '';
+
+      if (!sfx && !speech && !thought) {
+        return [
+          SECTION_TEXT_ELEMENTS,
+          '- No speech or thought bubbles.',
+        ].join('\n');
+      }
+
+      const lines: string[] = [SECTION_TEXT_ELEMENTS];
+      if (sfx) {
+        lines.push(`- SFX: ${sfx}`);
+      }
+      if (speech) {
+        lines.push(`- Speech bubble: ${speech}`);
+      }
+      if (thought) {
+        lines.push(`- Thought bubble: ${thought}`);
+      }
+      return lines.join('\n');
+    })(),
   );
 
   return sections.join('\n\n');

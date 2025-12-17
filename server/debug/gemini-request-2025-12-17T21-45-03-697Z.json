@@ -1,0 +1,49 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\nCharacter references:\n- Hegseth - Satire — Character reference images:\n  - Hegseth — Usage: Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally.\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n- Genre / subject focus: Slice of Life\n- Visual influences: American Comic\n\nLine & Detail:\n- Detail level: Highly Detailed\n\nColor & Lighting:\n- Lighting style: Soft, Even Light\n- Color palette: bold_colors\n- Saturation: medium\n\nRendering Technique:\n- Shading: Cel Shading\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nComposition & Camera:\n- Camera style: Cinematic Framing\n- Focal length / lens feel: Normal Lens Feel\n\nMood & Atmosphere:\n- Mood keywords: Whimsical\n\nCaricature & Exaggeration:\n- Exaggeration level: Strong caricature\n- Head-to-body exaggeration: Noticeably oversized head (cartoon proportion)\n- Eye exaggeration: Large, highly expressive eyes\n- Mouth exaggeration: Large, highly expressive mouth\n- Eyebrow exaggeration: Bold, highly expressive eyebrows\n- Jaw / chin exaggeration: Strong, stylized jawline or chin\n- Elastic shape distortion: Highly elastic, cartoon-like forms\n- Intentional asymmetry: Strong, intentional asymmetry\n- Silhouette exaggeration: Strong, stylized silhouette\n- Expression exaggeration: Highly expressive, theatrical\n- Likeness preservation: Very strong likeness preservation\n- Line style: Expressive hand-drawn lines\n\nCHARACTERS\n\nCHARACTER — Hegseth - Satire\n\nTASK\nHegseth in a bathtub, no shirt, wearing a camouflage pattern bath cap, using a toy missile to attack a toy fishing boat in the bath tub. A rubber duck shields it eyes with it's wings form the horror it sees. 3 generals peer in through the bathroom door, very concerned about what they see.\n\nTEXT ELEMENTS\n- SFX: Text: Sploosh! | Style: Design a bold comic-style SFX text element.\n- Text: Use short, punchy onomatopoeia like \"BAM!\", \"CRACK!\", or \"WOW!\" that matches the action.\n- Lettering: Thick, uppercase letters with a strong black outline and slight perspective or squash/stretch for impact.\n- Fill color: Bright, high-contrast warm colors (yellows, oranges, reds) with optional subtle gradient.\n- Background: Optional burst or radial starburst behind the letters using complementary colors.\n- Effects: Consider small motion lines, sparks, or debris around the SFX to emphasize impact.\n- Placement: Near the center of the action, but do not cover faces or important details.\n- Speech bubble: Text: He's making an awful mess in there. | Position: Near the generals | Style: Add a clean speech bubble for dialogue.\n- Bubble shape: Smooth, rounded oval or slightly irregular hand-drawn oval.\n- Tail: A solid, tapered tail pointing clearly to the speaking character’s mouth.\n- Line style: Medium-weight clean black outline.\n- Fill color: Solid white or very light off-white; keep interior uncluttered.\n- Text: Centered, legible uppercase or mixed-case lettering with good spacing.\n- Placement: Near the speaker’s head without covering eyes or important facial features; avoid overlapping key SFX or scene details.\n- Thought bubble: Text: Blow, blow, blow that boat, Gently down the stream, Dead men tell no tales at all— Facts aren’t what they seem. | Style: Add a soft thought bubble for internal monologue.\n- Bubble shape: Cloud-like cluster of round, fluffy shapes.\n- Tail: A dotted or bubble-tail sequence leading from the character’s head to the main bubble.\n- Line style: Slightly lighter or softer black outline than speech bubbles.\n- Fill color: White or very light tint; keep text clearly readable.\n- Text: Centered, slightly smaller or lighter weight than speech bubble text.\n- Placement: Above or slightly behind the character’s head, without intersecting the character’s face or main SFX."
+        },
+        {
+          "text": "Image reference: Hegseth — Character reference images.\nUsage: Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally."
+        },
+        {
+          "inlineData": {
+            "mimeType": "image/jpeg",
+            "data": "<base64 112228 chars redacted>"
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "16:9",
+      "imageSize": "1344x768"
+    }
+  }
+}

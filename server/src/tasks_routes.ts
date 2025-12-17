@@ -59,6 +59,9 @@ type TaskWithProject = {
   prompt: string | null;
   status: string;
   aspect_ratio: string | null;
+  sfx_metadata: unknown | null;
+  speech_metadata: unknown | null;
+  thought_metadata: unknown | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -138,6 +141,65 @@ const parseJsonIfString = <T>(value: unknown): T | null => {
     return value as T;
   }
   return null;
+};
+
+type TaskBubbleMetadataWire = {
+  text: string | null;
+  position: string | null;
+  style: string | null;
+  instructions: string | null;
+} | null;
+
+const toTaskBubbleMetadataWire = (value: unknown): TaskBubbleMetadataWire => {
+  const parsed = parseJsonIfString<{
+    text?: unknown;
+    position?: unknown;
+    style?: unknown;
+    instructions?: unknown;
+  }>(value);
+  if (!parsed) return null;
+
+  const text =
+    typeof parsed.text === 'string' && parsed.text.trim().length > 0
+      ? parsed.text.trim()
+      : null;
+  const position =
+    typeof parsed.position === 'string' && parsed.position.trim().length > 0
+      ? parsed.position.trim()
+      : null;
+  const style =
+    typeof parsed.style === 'string' && parsed.style.trim().length > 0
+      ? parsed.style.trim()
+      : null;
+
+  let instructions: string | null = null;
+  if (typeof parsed.instructions === 'string') {
+    const trimmed = parsed.instructions.trim();
+    if (trimmed) {
+      instructions = trimmed;
+    }
+  }
+
+  if (!instructions) {
+    const parts: string[] = [];
+    if (text) parts.push(`Text: ${text}`);
+    if (position) parts.push(`Position: ${position}`);
+    if (style) parts.push(`Style: ${style}`);
+    if (parts.length > 0) {
+      instructions = parts.join(' | ');
+    }
+  }
+
+  if (!text && !position && !style && !instructions) {
+    return null;
+  }
+
+  return {
+    text,
+    position,
+    style,
+    instructions,
+  };
 };
 
 const signUrlForFileKey = (fileKey: string, existingUrl: string): string => {
@@ -356,11 +418,23 @@ projectsRouter.post(
         (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
           ? ((task as any).aspect_ratio as string)
           : null;
+      const sfxMetadata = toTaskBubbleMetadataWire(
+        (task as any).sfx_metadata,
+      );
+      const speechMetadata = toTaskBubbleMetadataWire(
+        (task as any).speech_metadata,
+      );
+      const thoughtMetadata = toTaskBubbleMetadataWire(
+        (task as any).thought_metadata,
+      );
       res.status(201).json({
         task: {
           ...task,
           aspect_ratio: aspectRatio,
           aspectRatio,
+          sfxMetadata,
+          speechMetadata,
+          thoughtMetadata,
         },
       });
     } catch (error: any) {
@@ -432,12 +506,24 @@ projectsRouter.get(
           (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
             ? ((task as any).aspect_ratio as string)
             : null;
+        const sfxMetadata = toTaskBubbleMetadataWire(
+          (task as any).sfx_metadata,
+        );
+        const speechMetadata = toTaskBubbleMetadataWire(
+          (task as any).speech_metadata,
+        );
+        const thoughtMetadata = toTaskBubbleMetadataWire(
+          (task as any).thought_metadata,
+        );
 
         return {
           ...task,
           status,
           aspect_ratio: aspectRatio,
           aspectRatio,
+          sfxMetadata,
+          speechMetadata,
+          thoughtMetadata,
         };
       });
 
@@ -522,11 +608,23 @@ spaceTasksRouter.post(
         (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
           ? ((task as any).aspect_ratio as string)
           : null;
+      const sfxMetadata = toTaskBubbleMetadataWire(
+        (task as any).sfx_metadata,
+      );
+      const speechMetadata = toTaskBubbleMetadataWire(
+        (task as any).speech_metadata,
+      );
+      const thoughtMetadata = toTaskBubbleMetadataWire(
+        (task as any).thought_metadata,
+      );
       res.status(201).json({
         task: {
           ...task,
           aspect_ratio: aspectRatio,
           aspectRatio,
+          sfxMetadata,
+          speechMetadata,
+          thoughtMetadata,
         },
       });
     } catch (error: any) {
@@ -616,12 +714,24 @@ spaceTasksRouter.get(
           (task as any).aspect_ratio && typeof (task as any).aspect_ratio === 'string'
             ? ((task as any).aspect_ratio as string)
             : null;
+        const sfxMetadata = toTaskBubbleMetadataWire(
+          (task as any).sfx_metadata,
+        );
+        const speechMetadata = toTaskBubbleMetadataWire(
+          (task as any).speech_metadata,
+        );
+        const thoughtMetadata = toTaskBubbleMetadataWire(
+          (task as any).thought_metadata,
+        );
 
         return {
           ...task,
           status,
           aspect_ratio: aspectRatio,
           aspectRatio,
+          sfxMetadata,
+          speechMetadata,
+          thoughtMetadata,
         };
       });
 
@@ -720,28 +830,154 @@ taskRenderRouter.patch(
       return;
     }
 
-    const { aspectRatio } = req.body as {
+    const body = req.body as {
       aspectRatio?: string | null;
+      sfxMetadata?: TaskBubbleMetadataWire;
+      speechMetadata?: TaskBubbleMetadataWire;
+      thoughtMetadata?: TaskBubbleMetadataWire;
     };
 
-    const allowedAspectRatios = new Set([
-      '1:1',
-      '3:4',
-      '4:3',
-      '9:16',
-      '16:9',
-    ]);
-    const normalized =
-      aspectRatio && allowedAspectRatios.has(aspectRatio) ? aspectRatio : null;
+    const hasAspectRatio = Object.prototype.hasOwnProperty.call(
+      body,
+      'aspectRatio',
+    );
+    const hasSfx = Object.prototype.hasOwnProperty.call(
+      body,
+      'sfxMetadata',
+    );
+    const hasSpeech = Object.prototype.hasOwnProperty.call(
+      body,
+      'speechMetadata',
+    );
+    const hasThought = Object.prototype.hasOwnProperty.call(
+      body,
+      'thoughtMetadata',
+    );
+
+    if (!hasAspectRatio && !hasSfx && !hasSpeech && !hasThought) {
+      res.status(400).json({ error: 'TASK_UPDATE_EMPTY' });
+      return;
+    }
+
+    const { aspectRatio, sfxMetadata, speechMetadata, thoughtMetadata } = body;
 
     try {
       const db = getDbPool();
-      await db.query('UPDATE tasks SET aspect_ratio = ? WHERE id = ?', [
-        normalized,
-        task.id,
-      ]);
+      const updates: string[] = [];
+      const params: any[] = [];
 
-      res.status(200).json({ aspectRatio: normalized });
+      if (hasAspectRatio) {
+        const allowedAspectRatios = new Set([
+          '1:1',
+          '3:4',
+          '4:3',
+          '9:16',
+          '16:9',
+        ]);
+        const normalizedAspectRatio =
+          aspectRatio && allowedAspectRatios.has(aspectRatio)
+            ? aspectRatio
+            : null;
+        updates.push('aspect_ratio = ?');
+        params.push(normalizedAspectRatio);
+      }
+
+      const normalizeBubbleForUpdate = (
+        value: TaskBubbleMetadataWire | undefined,
+      ): string | null => {
+        if (!value) return null;
+        const text =
+          typeof value.text === 'string' && value.text.trim().length > 0
+            ? value.text.trim()
+            : null;
+        const position =
+          typeof value.position === 'string' &&
+          value.position.trim().length > 0
+            ? value.position.trim()
+            : null;
+        const style =
+          typeof value.style === 'string' && value.style.trim().length > 0
+            ? value.style.trim()
+            : null;
+
+        let instructions: string | null =
+          typeof value.instructions === 'string' &&
+          value.instructions.trim().length > 0
+            ? value.instructions.trim()
+            : null;
+        if (!instructions) {
+          const parts: string[] = [];
+          if (text) parts.push(`Text: ${text}`);
+          if (position) parts.push(`Position: ${position}`);
+          if (style) parts.push(`Style: ${style}`);
+          if (parts.length > 0) {
+            instructions = parts.join(' | ');
+          }
+        }
+
+        if (!text && !position && !style && !instructions) {
+          return null;
+        }
+
+        return JSON.stringify({
+          text,
+          position,
+          style,
+          instructions,
+        });
+      };
+
+      if (hasSfx) {
+        updates.push('sfx_metadata = ?');
+        params.push(normalizeBubbleForUpdate(sfxMetadata));
+      }
+      if (hasSpeech) {
+        updates.push('speech_metadata = ?');
+        params.push(normalizeBubbleForUpdate(speechMetadata));
+      }
+      if (hasThought) {
+        updates.push('thought_metadata = ?');
+        params.push(normalizeBubbleForUpdate(thoughtMetadata));
+      }
+
+      if (updates.length === 0) {
+        res.status(400).json({ error: 'TASK_UPDATE_EMPTY' });
+        return;
+      }
+
+      await db.query(
+        `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
+        [...params, task.id],
+      );
+
+      const [rows] = await db.query(
+        'SELECT * FROM tasks WHERE id = ? LIMIT 1',
+        [task.id],
+      );
+      const list = rows as TaskWithProject[];
+      const updatedTask = list[0];
+
+      const updatedAspectRatio =
+        updatedTask?.aspect_ratio &&
+        typeof updatedTask.aspect_ratio === 'string'
+          ? updatedTask.aspect_ratio
+          : null;
+      const updatedSfx = toTaskBubbleMetadataWire(
+        (updatedTask as any).sfx_metadata,
+      );
+      const updatedSpeech = toTaskBubbleMetadataWire(
+        (updatedTask as any).speech_metadata,
+      );
+      const updatedThought = toTaskBubbleMetadataWire(
+        (updatedTask as any).thought_metadata,
+      );
+
+      res.status(200).json({
+        aspectRatio: updatedAspectRatio,
+        sfxMetadata: updatedSfx,
+        speechMetadata: updatedSpeech,
+        thoughtMetadata: updatedThought,
+      });
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error('[tasks] Update task metadata error:', error);
@@ -1216,6 +1452,16 @@ taskRenderRouter.post(
         inlineImageInputs = [];
       }
 
+      const sfxMeta = toTaskBubbleMetadataWire(
+        (task as any).sfx_metadata,
+      );
+      const speechMeta = toTaskBubbleMetadataWire(
+        (task as any).speech_metadata,
+      );
+      const thoughtMeta = toTaskBubbleMetadataWire(
+        (task as any).thought_metadata,
+      );
+
       const finalPrompt = renderPrompt({
         taskPrompt: prompt,
         characters: characterDefinitions.map((def, index) => {
@@ -1233,6 +1479,9 @@ taskRenderRouter.post(
           ? (referenceConstraintDefinition.name as string)
           : null,
         imageReferences: resolvedImageRefs,
+        sfxInstructions: sfxMeta?.instructions ?? null,
+        speechInstructions: speechMeta?.instructions ?? null,
+        thoughtInstructions: thoughtMeta?.instructions ?? null,
       });
       const hasInlineImages = inlineImageInputs.length > 0;
 
@@ -1468,6 +1717,15 @@ taskRenderRouter.post(
         typeof updatedTask.aspect_ratio === 'string'
           ? updatedTask.aspect_ratio
           : null;
+      const updatedSfx = toTaskBubbleMetadataWire(
+        (updatedTask as any).sfx_metadata,
+      );
+      const updatedSpeech = toTaskBubbleMetadataWire(
+        (updatedTask as any).speech_metadata,
+      );
+      const updatedThought = toTaskBubbleMetadataWire(
+        (updatedTask as any).thought_metadata,
+      );
 
       const signedAsset = maybeSignAssetUrl(asset);
 
@@ -1476,6 +1734,9 @@ taskRenderRouter.post(
           ...updatedTask,
           aspect_ratio: updatedAspectRatio,
           aspectRatio: updatedAspectRatio,
+          sfxMetadata: updatedSfx,
+          speechMetadata: updatedSpeech,
+          thoughtMetadata: updatedThought,
         },
         renderedAssets: [signedAsset],
       });

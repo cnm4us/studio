@@ -1,0 +1,58 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\nCharacter references:\n- Eve (v 2.0) — Full-character reference images:\n  - Eve (v 2.0) Standing back view — Usage: Use this image as a full-character identity and pose reference.\n\nScene references:\n- Garden of Eden — Scene reference images:\n  - Garden of Eden — Usage: Use this image for scene layout, environment, and lighting; keep character identity from character references.\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n- Genre / subject focus: Historical\n\nLine & Detail:\n- Detail level: Highly Detailed\n- Line weight: Thin Clean Lines\n- Line quality: Sketchy / Rough\n\nColor & Lighting:\n- Color palette: bold_colors\n- Saturation: medium\n- Lighting style: Ambient / Environmental Light\n\nRendering Technique:\n- Shading: Cel Shading\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nComposition & Camera:\n- Camera style: Cinematic Framing\n- Focal length / lens feel: Normal Lens Feel\n\nMood & Atmosphere:\n- Atmosphere / environment feel: Beginning-of-time, trees, rocks, bushes\n\nCaricature & Exaggeration:\n- Exaggeration level: Moderate caricature\n- Head-to-body exaggeration: Slightly enlarged head\n- Eye exaggeration: Slightly enlarged eyes\n- Mouth exaggeration: Slightly emphasized mouth\n- Eyebrow exaggeration: Slightly emphasized eyebrows\n- Jaw / chin exaggeration: Slightly emphasized jaw or chin\n- Elastic shape distortion: Slightly softened forms\n- Intentional asymmetry: Moderate hand-drawn asymmetry\n- Silhouette exaggeration: Slightly stylized silhouette\n- Expression exaggeration: Slightly expressive\n- Likeness preservation: Very strong likeness preservation\n- Line style: Expressive hand-drawn lines\n\nCHARACTERS\n\nCHARACTER — Eve (v 2.0)\nCore Identity:\n- Age / apparent age range: Early 30s\n- Gender identity or presentation: Woman\n- Pronouns: she/her\n- Species / race: Human\n- Ethnicity / cultural cues: Northern European Features\n- Height category: Average Height\n- Body type: Toned\n- Archetype: Sage\n\nFacial Structure:\n- Face shape: Diamond\n- Jawline: Short Jawline\n- Cheek structure: High Cheekbones\n- Forehead proportion: Balanced Proportion\n- Eye shape: Almond\n- Eye size: Large Eyes\n- Eye color: Green\n- Eyebrow shape: Soft Arched\n- Nose shape: Aquiline Nose\n- Mouth shape: Medium Lips\n- Chin: Tapered Chin\n\nHair:\n- Hair color: Brown\n- Hair texture: Wavy\n- Hair length: Very Long\n- Parting: No Visible Part\n- Volume: Extra Voluminous\n- Hair silhouette: Long Wavy\n\nSkin:\n- Skin tone: Medium Brown\n- Undertone: Golden\n\nPhysique:\n- Overall body shape: Hourglass\n- Shoulder width: Average\n- Waist definition: Tapered\n- Torso length: Average\n- Leg length: Average\n- Musculature: Toned\n\nCharacter Lore:\n- Backstory summary: Eve, mythological first woman\n- Motivations: Curiosity / Discovery\n- Strengths: Observant\n- Flaws: Naive, Overly Trusting, Overly Idealistic\n- Role in story: Navigator / Strategist\n\nSCENE\nCore Scene Identity:\n- Scene name: Garden of Eden\n- Setting type: Outdoor\n- Genre / world flavor: Fantasy\n- Time period / era: Ancient / Antiquity\n- Narrative role: Establishing Environment\n- Environmental influences: The-very-beginning\n\nSpatial Layout & Environment Geometry:\n- Height complexity: Varied Heights (uneven terrain, tall shelves)\n\nLighting & Illumination:\n- Time of day: Afternoon\n- Primary light source: Sunlight\n- Light direction: Side light (left)\n- Lighting intensity: 50\n- Shadow style: Soft shadows\n- Light temperature: Warm (yellow/orange)\n\nCamera & Composition:\n- Default camera angle: Eye-level\n- Default shot type: Extreme close-up\n- Default focal length: Natural (~50mm, human-like)\n- Composition rules: Centered / symmetry\n- Perspective style: One-point perspective\n- Allowed camera movements: Pan left, Pan right, Tilt down, Tilt up, Dolly in (move forward)\n\nAtmosphere & Environmental Effects:\n- Weather type: Clear / No weather effects\n\nTASK\nclose up shot of 3/4 standing back view of Eve petting large serpent hanging from the tree.\n\nTEXT ELEMENTS\n- No speech or thought bubbles."
+        },
+        {
+          "text": "Image reference: Eve (v 2.0) Standing back view — Full-character reference images.\nUsage: Use this image as a full-character identity and pose reference."
+        },
+        {
+          "inlineData": {
+            "mimeType": "image/jpeg",
+            "data": "<base64 18064 chars redacted>"
+          }
+        },
+        {
+          "text": "Image reference: Garden of Eden — Scene reference images.\nUsage: Use this image for scene layout, environment, and lighting; keep character identity from character references."
+        },
+        {
+          "inlineData": {
+            "mimeType": "image/jpeg",
+            "data": "<base64 280732 chars redacted>"
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "9:16",
+      "imageSize": "768x1344"
+    }
+  }
+}

@@ -383,6 +383,14 @@ export const renderImageWithGemini = async (
 
     // eslint-disable-next-line no-console
     console.log(
+      `[ai] Gemini prompt (model=${cfg.model}):\n` +
+        '------------------------------------------------------------\n' +
+        `${prompt}\n` +
+        '------------------------------------------------------------',
+    );
+
+    // eslint-disable-next-line no-console
+    console.log(
       `[ai] Gemini request debug (model=${cfg.model}):\n` +
         '------------------------------------------------------------\n' +
         `${JSON.stringify(stub, null, 2)}\n` +

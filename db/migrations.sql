@@ -194,3 +194,14 @@ CREATE TABLE IF NOT EXISTS space_assets (
 
 ALTER TABLE space_assets
   ADD COLUMN usage_hint TEXT NULL AFTER name;
+
+-- Plan 25: Task-level SFX / speech / thought bubble metadata
+
+ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS sfx_metadata JSON NULL;
+
+ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS speech_metadata JSON NULL;
+
+ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS thought_metadata JSON NULL;

@@ -10,6 +10,9 @@ export type TaskRecord = {
   description: string | null;
   prompt: string | null;
   aspect_ratio: string | null;
+   sfx_metadata: unknown | null;
+   speech_metadata: unknown | null;
+   thought_metadata: unknown | null;
   status: TaskStatus;
   created_at: Date;
   updated_at: Date;

@@ -39,6 +39,22 @@ export const clothingDefaultsCategory: AppearanceCategory = {
       allowCustom: true,
     },
     {
+      key: "apparel_constraints",
+      label: "Apparel Constraints",
+      type: "tags",
+      options: [
+        { value: "lock_top", label: "Top must not change" },
+        { value: "lock_bottom", label: "Bottom must not change" },
+        { value: "lock_full_outfit", label: "Entire outfit is fixed" },
+        { value: "no_layer_additions", label: "Do not add layers (jackets, coats)" },
+        { value: "no_layer_removals", label: "Do not remove layers" },
+        { value: "no_style_substitution", label: "No stylistic reinterpretation" },
+        { value: "no_color_shift", label: "No color or fabric changes" },
+        { value: "no_accessory_additions", label: "No new accessories" },
+        { value: "no_accessory_removals", label: "Do not remove accessories" },
+      ],
+    },
+    {
       key: "color_palette",
       label: "Color palette",
       type: "enum",

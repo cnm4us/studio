@@ -100,3 +100,14 @@ If unclear which mode applies, ask the user to clarify.
   - the implementation plan (mark the step completed).
 - If you are creating or modifying an implementation plan, read:
 → `agents/implementation_planning.md`
+
+---
+
+## Gemini Debug Artifacts
+**Trigger:** Debugging Gemini image-generation issues or investigating render failures.
+
+- When the server runs with `DEBUG_PROMPT` set to a truthy value (for example, `1`), Gemini calls in `server/src/gemini_client.ts`:
+  - Write request stubs to `server/debug/gemini-request-*.json`.
+  - Write error stubs to `server/debug/gemini-error-*.json` for both upstream SDK failures and internal sentinel errors such as `GEMINI_NO_IMAGE_RETURNED`.
+- These JSON files are **server-side only** and may include prompt text and redacted inline image metadata; they do not contain API keys.
+- Use these artifacts, plus console logs, to understand why a particular render failed without changing any client-visible behavior.

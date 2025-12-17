@@ -1,0 +1,49 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\nCharacter references:\n- Hegseth - Satire — Character reference images:\n  - Hegseth — Usage: Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally.\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n- Genre / subject focus: Slice of Life\n- Visual influences: American Comic\n\nLine & Detail:\n- Detail level: Highly Detailed\n\nColor & Lighting:\n- Lighting style: Soft, Even Light\n- Color palette: bold_colors\n- Saturation: medium\n\nRendering Technique:\n- Shading: Cel Shading\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nComposition & Camera:\n- Camera style: Cinematic Framing\n- Focal length / lens feel: Normal Lens Feel\n\nMood & Atmosphere:\n- Mood keywords: Whimsical\n\nCaricature & Exaggeration:\n- Exaggeration level: Strong caricature\n- Head-to-body exaggeration: Noticeably oversized head (cartoon proportion)\n- Eye exaggeration: Large, highly expressive eyes\n- Mouth exaggeration: Large, highly expressive mouth\n- Eyebrow exaggeration: Bold, highly expressive eyebrows\n- Jaw / chin exaggeration: Strong, stylized jawline or chin\n- Elastic shape distortion: Highly elastic, cartoon-like forms\n- Intentional asymmetry: Strong, intentional asymmetry\n- Silhouette exaggeration: Strong, stylized silhouette\n- Expression exaggeration: Highly expressive, theatrical\n- Likeness preservation: Very strong likeness preservation\n- Line style: Expressive hand-drawn lines\n\nCHARACTERS\n\nCHARACTER — Hegseth - Satire\n\nTASK\nHegseth sits in a bathtub with a camouflage bath cap. He's using a toy missile to slam a toy fishing boat in the bathtub. I rubber duck sits on the edge of the tub using it's wings to shield it's eyes from the horror. 3 generals peak in through the bathroom door very concerned about what they are seeing.\n\nTEXT ELEMENTS\n- No speech or thought bubbles."
+        },
+        {
+          "text": "Image reference: Hegseth — Character reference images.\nUsage: Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally."
+        },
+        {
+          "inlineData": {
+            "mimeType": "image/jpeg",
+            "data": "<base64 112228 chars redacted>"
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "16:9",
+      "imageSize": "1344x768"
+    }
+  }
+}
