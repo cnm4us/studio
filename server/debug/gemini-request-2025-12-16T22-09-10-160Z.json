@@ -1,0 +1,40 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\n- No image reference constraints provided.\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n- Genre / subject focus: Urban / Street\n\nLine & Detail:\n- Detail level: Highly Detailed\n- Line weight: Thin Clean Lines\n- Line quality: Clean / Polished\n\nColor & Lighting:\n- Lighting style: Studio Lighting\n- Color palette: bold_colors\n- Saturation: medium\n\nRendering Technique:\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nMood & Atmosphere:\n- Mood keywords: Whimsical\n\nTASK\n- Generate a single composite image containing three views of the same character.\n- All three views must depict the exact same woman with identical facial structure, skin tone, and hair.\n- This image will be used as a canonical character reference for future illustrations.\n- Focus on naturalism, restraint, and identity clarity rather than drama or action.\n- The character must appear adult and non-sexualized.\n\nSUBJECT\n- Name: Eve\n- Gender: Woman\n- Apparent age: Late 20s\n- Species: Human\n- Ethnicity / features: Northern European facial structure with a deep sun-kissed tan\n- Overall impression: Natural, grounded, quietly confident, pre-civilization human\n\nPHYSIOGNOMY\n- Face shape: Balanced oval with subtle cheekbone definition\n- Jawline: Soft but defined\n- Nose: Straight, natural proportions\n- Lips: Medium fullness, relaxed\n- Eyes: Almond-shaped, calm gaze\n- Eyebrows: Natural thickness, minimal shaping\n- Expression: Neutral, serene, thoughtful\n- Skin: Deep natural tan, sun-exposed, healthy texture (not glossy or stylized)\n\nHAIR\n- Hair color: Dark blonde to light brown\n- Texture: Naturally wavy\n- Length: Long, falling past the shoulders\n- Styling: Loose, unstyled, wind-set\n- Part: Natural, slightly off-center\n\nBODY & PRESENTATION\n- Body type: Natural, athletic-slim\n- Posture: Relaxed, upright, unposed\n- Ornamentation: None\n- Makeup: None\n- Clothing: Minimal mythological covering (subtle foliage or neutral wrap), not decorative\n\nTURNAROUND PANEL REQUIREMENTS\n- Layout: Three evenly spaced views in a single image\n- Views (left to right):\n  1. Portrait view (straight-on)\n  2. Three-quarter view (slight turn, primary identity reference)\n  3. Profile view (full side silhouette)\n- Scale: All views at the same scale\n- Lighting: Neutral, even lighting for clarity\n- Background: Simple, unobtrusive neutral background\n\nTEXT ELEMENTS\n- No speech or thought bubbles."
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "16:9",
+      "imageSize": "1344x768"
+    }
+  }
+}

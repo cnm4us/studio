@@ -27,3 +27,10 @@
 - Mode: Implementation Plan Mode (for new work).
 - Previously created and executed `agents/implementation/plan_22.md` to migrate the Gemini client from `@google/generative-ai` to `@google/genai` and wire task-level aspect ratio into `config.imageConfig` (coordinated with Plan 21).
 - Newly created `agents/implementation/plan_23.md` to add configurable Gemini `safetySettings` driven by `.env` knobs for each harm category, and to pass them via `config.safetySettings` on image renders.
+
+## 8.6 Recent Commit
+- Commit: `feat(api): task aspect ratio and Gemini image config`.
+- Includes:
+  - Task-level aspect ratio column and API wiring, plus UI selectors on project/space task cards.
+  - Migration of the Gemini client to `@google/genai` with `config.imageConfig` (aspectRatio + imageSize) and updated debug stubs.
+  - New implementation plans 21–23 and this handoff file to document aspect ratio, SDK migration, and upcoming safety configuration.

@@ -1,0 +1,40 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\n- No image reference constraints provided.\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n- Genre / subject focus: Urban / Street\n\nLine & Detail:\n- Detail level: Highly Detailed\n- Line weight: Thin Clean Lines\n- Line quality: Clean / Polished\n\nColor & Lighting:\n- Lighting style: Studio Lighting\n- Color palette: bold_colors\n- Saturation: medium\n\nRendering Technique:\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nMood & Atmosphere:\n- Mood keywords: Whimsical\n\nTASK\n- Generate a single composite image with three full-body views of the same adult woman.\n- This is a canonical character turnaround for identity reference.\n- Depict the figure in a natural, non-sexual, classical manner.\n\nSUBJECT\n- Name: Eve\n- Woman, late 20s\n- Northern European facial structure\n- Light sun-kissed tan (natural outdoor tan)\n\nMODESTY & COVERAGE\n- Minimal, neutral coverage for modesty only\n- Coverage should be unobtrusive and non-decorative\n- No clothing, no fashion, no accessories\n- No emphasis on covered areas\n\nTURNAROUND\n- Three views: front, three-quarter, profile\n- Full body visible head to toe\n- Neutral pose, relaxed posture\n\nSTYLE\n- Comic illustration\n- Clean ink lines\n- Subtle cel shading\n- Neutral background\n\nRESTRICTIONS\n- Do not crop to headshot\n- Do not add costumes or outfits\n- Do not sexualize anatomy\n\nTEXT ELEMENTS\n- No speech or thought bubbles."
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "16:9",
+      "imageSize": "1344x768"
+    }
+  }
+}

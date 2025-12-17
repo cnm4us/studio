@@ -1,0 +1,40 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\n- No image reference constraints provided.\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n- Genre / subject focus: Urban / Street\n\nLine & Detail:\n- Detail level: Highly Detailed\n- Line weight: Thin Clean Lines\n- Line quality: Clean / Polished\n\nColor & Lighting:\n- Lighting style: Studio Lighting\n- Color palette: bold_colors\n- Saturation: medium\n\nRendering Technique:\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nMood & Atmosphere:\n- Mood keywords: Whimsical\n\nTASK\n- Generate a single composite image containing three full-body views of the same character.\n- All three views must depict the exact same adult woman with identical anatomy, proportions, skin tone, and hair.\n- This image is a canonical character turnaround to be reused as a visual reference.\n- The depiction must be natural, non-sexual, and non-erotic.\n- The character must be fully visible from head to feet in all views.\n\nSUBJECT\n- Name: Eve\n- Gender: Woman\n- Apparent age: Late 20s (clearly adult)\n- Species: Human\n- Ethnicity / features: Northern European facial structure\n- Skin tone: Sun-kissed tan, slightly lighter than deep bronze (natural outdoor tan, not dark or stylized)\n- Overall presence: Calm, grounded, pre-civilization human\n\nNUDITY & MODESTY\n- Clothing: None\n- State of dress: Fully nude\n- Treatment: Classical, non-sexual, naturalistic\n- No jewelry, no accessories, no modern items\n- Poses must be neutral and relaxed, not provocative\n- Genitals may be naturally present but not emphasized\n- No erotic framing, no sexualized posture, no suggestive expression\n\nPHYSIOGNOMY\n- Face shape: Balanced oval\n- Jawline: Soft but defined\n- Nose: Straight, natural proportions\n- Lips: Medium fullness\n- Eyes: Almond-shaped, calm gaze\n- Brows: Natural thickness\n- Expression: Neutral, serene, observant\n\nHAIR\n- Hair color: Dark blonde to light brown\n- Texture: Naturally wavy\n- Length: Long, falling past shoulders\n- Styling: Loose, unstyled, natural\n- Part: Slightly off-center, organic\n\nBODY & PROPORTIONS\n- Body type: Natural, athletic-slim\n- Shoulders: Proportional\n- Waist: Natural taper\n- Hips: Balanced\n- Legs: Long, natural musculature\n- Posture: Upright, relaxed, evenly weighted\n\nTURNAROUND PANEL REQUIREMENTS\n- Layout: Three full-body views in a single image\n- Views (left to right):\n  1. Front / portrait view (full body, straight-on)\n  2. Three-quarter view (primary identity reference)\n  3. Profile view (full side silhouette)\n- Scale: All three views at identical scale\n- Framing: Head-to-toe visible in each view\n- Spacing: Even spacing between views\n\n\nRESTRICTIONS\n- Do not crop the body.\n- Do not switch to headshot framing.\n- Do not add clothing, drapery, leaves, or coverings.\n- Do not exaggerate anatomy.\n- Do not sexualize the figure.\n- Do not add narrative action or emotion.\n\nTEXT ELEMENTS\n- No speech or thought bubbles."
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "16:9",
+      "imageSize": "1344x768"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "IMAGE REFERENCES\n(Use these reference images in accordance with the REFERENCE CONSTRAINTS section.)\nReference constraint:\n- Black Lace — Clothing reference images\n  - Usage: Use this image for clothing and outfit details only; keep the character’s face and body from the other references.\n- Jennifer — Character reference images\n  - Usage: Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally.\n\nREFERENCE CONSTRAINTS\nApply these rules when interpreting and combining reference images for this render.\n- Name: Minor Flexibility\n- Reference fidelity mode: Balanced (Faithful but Stylized)\n- Character identity lock: Strict Identity Preservation\n- Scene layout lock: Preserve General Spatial Feel\n- Camera adjustment allowance: Moderate Reframing Allowed\n- Character pose flexibility: Adapt Pose to Task\n\nSTYLE\nCore Style:\n- Render domain: Comic Illustration\n\nLine & Detail:\n- Detail level: Highly Detailed\n- Line weight: No Visible Outlines\n- Line quality: Clean / Polished\n\nColor & Lighting:\n- Lighting style: Studio Lighting\n- Color palette: bold_colors\n- Saturation: medium\n\nRendering Technique:\n- Texture treatment: Smooth / Clean\n- Surface finish: Matte Finish\n\nMood & Atmosphere:\n- Mood keywords: Whimsical\n\nTASK\nRender an image for space 14 / task 17\n\nTEXT ELEMENTS\n- No speech or thought bubbles."
+        },
+        {
+          "text": "Image reference: Black Lace — Clothing reference images.\nUsage: Use this image for clothing and outfit details only; keep the character’s face and body from the other references."
+        },
+        {
+          "inlineData": {
+            "mimeType": "image/jpeg",
+            "data": "<base64 33608 chars redacted>"
+          }
+        },
+        {
+          "text": "Image reference: Jennifer — Character reference images.\nUsage: Use this image only for the character’s facial identity and expression; do not copy clothing, background, or other details literally."
+        },
+        {
+          "inlineData": {
+            "mimeType": "image/jpeg",
+            "data": "<base64 121380 chars redacted>"
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      },
+      {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+      },
+      {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+      }
+    ],
+    "responseModalities": [
+      "IMAGE"
+    ],
+    "imageConfig": {
+      "aspectRatio": "16:9",
+      "imageSize": "1344x768"
+    }
+  }
+}

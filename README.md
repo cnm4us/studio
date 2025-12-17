@@ -104,6 +104,7 @@ Environment variables:
 
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` — API key for Gemini.
 - `GEMINI_IMAGE_MODEL` — image model name (defaults to `gemini-3-pro-image-preview`).
+- `GEMINI_SAFETY_HARASSMENT`, `GEMINI_SAFETY_HATE_SPEECH`, `GEMINI_SAFETY_SEXUAL`, `GEMINI_SAFETY_DANGEROUS` — optional safety thresholds per harm category for Gemini image generation. Allowed values: `BLOCK_LOW_AND_ABOVE`, `BLOCK_MEDIUM_AND_ABOVE`, `BLOCK_ONLY_HIGH`, `BLOCK_NONE`, `OFF` (default when unset/invalid is `BLOCK_MEDIUM_AND_ABOVE`).
 - `AWS_REGION` or `AWS_DEFAULT_REGION` — AWS region for S3.
 - `AWS_S3_BUCKET` or `ARGUS_S3_BUCKET` — bucket name for storing media.
 - `CF_DOMAIN` — optional CloudFront domain (e.g., `studio-media.bawebtech.com`); when set, rendered asset URLs use this domain.

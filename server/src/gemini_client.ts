@@ -1,4 +1,9 @@
-import { GoogleGenAI } from '@google/genai';
+import {
+  GoogleGenAI,
+  HarmBlockThreshold,
+  HarmCategory,
+  type SafetySetting,
+} from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,6 +41,65 @@ const getGeminiConfig = (): GeminiConfig => ({
 });
 
 let geminiClient: GoogleGenAI | null = null;
+
+const parseHarmBlockThreshold = (
+  raw: string | undefined,
+  fallback: HarmBlockThreshold,
+): HarmBlockThreshold => {
+  if (!raw) return fallback;
+  const trimmed = raw.trim().toUpperCase();
+  switch (trimmed) {
+    case 'BLOCK_LOW_AND_ABOVE':
+      return HarmBlockThreshold.BLOCK_LOW_AND_ABOVE;
+    case 'BLOCK_MEDIUM_AND_ABOVE':
+      return HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE;
+    case 'BLOCK_ONLY_HIGH':
+      return HarmBlockThreshold.BLOCK_ONLY_HIGH;
+    case 'BLOCK_NONE':
+      return HarmBlockThreshold.BLOCK_NONE;
+    case 'OFF':
+      return HarmBlockThreshold.OFF;
+    default:
+      return fallback;
+  }
+};
+
+const getDefaultSafetySettingsFromEnv = (): SafetySetting[] => {
+  const defaultThreshold = HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE;
+
+  const mappings: Array<{
+    envVar: string;
+    category: HarmCategory;
+  }> = [
+    {
+      envVar: 'GEMINI_SAFETY_HARASSMENT',
+      category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    },
+    {
+      envVar: 'GEMINI_SAFETY_HATE_SPEECH',
+      category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    },
+    {
+      envVar: 'GEMINI_SAFETY_SEXUAL',
+      category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    },
+    {
+      envVar: 'GEMINI_SAFETY_DANGEROUS',
+      category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    },
+  ];
+
+  const settings: SafetySetting[] = mappings.map(({ envVar, category }) => {
+    const raw = process.env[envVar];
+    const threshold = parseHarmBlockThreshold(raw, defaultThreshold);
+    return {
+      category,
+      threshold,
+    };
+  });
+
+  return settings;
+};
 
 const normalizeAspectRatioForGemini = (
   aspectRatio: string | null | undefined,
@@ -120,8 +184,12 @@ export const renderImageWithGemini = async (
 
   const normalizedAspectRatio = normalizeAspectRatioForGemini(aspectRatio);
   const imageSize = pickImageSizeForAspectRatio(normalizedAspectRatio);
+  const safetySettings = getDefaultSafetySettingsFromEnv();
 
   const baseConfig: any = {};
+  if (safetySettings.length > 0) {
+    baseConfig.safetySettings = safetySettings;
+  }
   if (normalizedAspectRatio) {
     baseConfig.responseModalities = ['IMAGE'];
     baseConfig.imageConfig = {
@@ -129,6 +197,8 @@ export const renderImageWithGemini = async (
       ...(imageSize ? { imageSize } : {}),
     };
   }
+
+  const hasConfig = Object.keys(baseConfig).length > 0;
 
   if (isPromptDebugEnabled()) {
     const partsForStub: Array<
@@ -176,11 +246,8 @@ export const renderImageWithGemini = async (
       ],
     };
 
-    if (normalizedAspectRatio) {
-      stub.config = {
-        responseModalities: baseConfig.responseModalities,
-        imageConfig: baseConfig.imageConfig,
-      };
+    if (hasConfig) {
+      stub.config = baseConfig;
     }
 
     try {
@@ -231,7 +298,7 @@ export const renderImageWithGemini = async (
       return client.models.generateContent({
         model: cfg.model,
         contents,
-        ...(normalizedAspectRatio ? { config: baseConfig } : {}),
+        ...(hasConfig ? { config: baseConfig } : {}),
       } as any);
     }
 
@@ -277,7 +344,7 @@ export const renderImageWithGemini = async (
     return client.models.generateContent({
       model: cfg.model,
       contents,
-      ...(normalizedAspectRatio ? { config: baseConfig } : {}),
+      ...(hasConfig ? { config: baseConfig } : {}),
     } as any);
   })();
 
