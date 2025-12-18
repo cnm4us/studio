@@ -7,3 +7,5 @@ server/dist
 npm-debug.log*
 yarn-error.log*
 
+# Gemini debug artifacts
+server/debug/*

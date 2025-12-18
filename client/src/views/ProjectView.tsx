@@ -953,7 +953,7 @@ export function ProjectView(props: ProjectViewProps) {
                             >
                               <option value="">Auto</option>
                               <option value="1:1">1:1</option>
-                              <option value="3:4">3:4</option>
+                              <option value="3:4">3:4 (≈ 8.5×11 portrait)</option>
                               <option value="4:3">4:3</option>
                               <option value="9:16">9:16</option>
                               <option value="16:9">16:9</option>
@@ -2075,6 +2075,51 @@ export function ProjectView(props: ProjectViewProps) {
                 marginTop: '0.6rem',
               }}
             >
+              <button
+                type="button"
+                onClick={() => {
+                  if (!activeTextElement) return;
+                  const updates: {
+                    sfx?: {
+                      text?: string | null;
+                      position?: string | null;
+                      style?: string | null;
+                    } | null;
+                    speech?: {
+                      text?: string | null;
+                      position?: string | null;
+                      style?: string | null;
+                    } | null;
+                    thought?: {
+                      text?: string | null;
+                      position?: string | null;
+                      style?: string | null;
+                    } | null;
+                  } = {};
+
+                  if (activeTextElement.kind === 'sfx') {
+                    updates.sfx = null;
+                  } else if (activeTextElement.kind === 'speech') {
+                    updates.speech = null;
+                  } else {
+                    updates.thought = null;
+                  }
+
+                  onUpdateTaskTextElements(activeTextElement.taskId, updates);
+                  setActiveTextElement(null);
+                }}
+                style={{
+                  padding: '0.3rem 0.8rem',
+                  borderRadius: '4px',
+                  border: '1px solid #b71c1c',
+                  backgroundColor: '#fff',
+                  color: '#b71c1c',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Clear
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveTextElement(null)}
